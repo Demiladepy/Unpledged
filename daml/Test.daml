@@ -1,0 +1,170 @@
+module Test where
+
+import DA.Date
+import DA.List (head)
+import Daml.Script
+import Invoice
+import Attestation
+import Financing
+
+-- Privacy verification at the ACS level (necessary but not sufficient).
+--
+-- query @T party returns contracts in that party's active contract set — i.e.
+-- contracts where the party is a stakeholder (signatory, observer, or controller
+-- on a consuming choice). Divulged contracts do NOT appear here.
+--
+-- Transaction-tree verification (required for a complete privacy proof):
+-- Daml Script cannot expose another party's transaction-tree projection. To
+-- verify that LenderA never witnesses Invoice fetch nodes, use the Ledger API
+-- after submitting ProveUnpledged:
+--
+--   1. Capture the updateId / offset from the submission response.
+--   2. Call the transaction-tree endpoint filtered by party = LenderA, e.g.
+--        GET /v2/updates/{updateId}/transaction-tree  (Canton JSON Ledger API v2)
+--      or the equivalent gRPC GetUpdateTrees / transaction-tree stream.
+--   3. Walk the tree and confirm there are NO Fetched / Exercised nodes whose
+--      templateId is Invoice. The only Invoice-related visibility LenderA should
+--      have is zero — the leaf create of UnpledgedAttestation (where lender is
+--      observer) must appear, but no ancestor fetch of Invoice may list LenderA
+--      as an informee.
+--
+-- If any Invoice fetch node lists LenderA as informee, privacy is broken even
+-- when query @Invoice lender returns [].
+
+testPrivacy : Script ()
+testPrivacy = do
+  owner <- allocatePartyWithHint "SME" (PartyIdHint "SME")
+  debtor <- allocatePartyWithHint "Debtor" (PartyIdHint "Debtor")
+  lender <- allocatePartyWithHint "LenderA" (PartyIdHint "LenderA")
+
+  invoice1Cid <- submitMulti [owner, debtor] [] do
+    createCmd Invoice with
+      owner
+      debtor
+      amount = 100.0
+      dueDate = date 2026 Jan 31
+      invoiceNumber = "INV-001"
+      settledOn = Some (date 2026 Jan 15)
+
+  invoice2Cid <- submitMulti [owner, debtor] [] do
+    createCmd Invoice with
+      owner
+      debtor
+      amount = 200.0
+      dueDate = date 2026 Jan 31
+      invoiceNumber = "INV-002"
+      settledOn = Some (date 2026 Jan 20)
+
+  factoryCid <- submit owner do
+    createCmd AttestationFactory with owner
+
+  _ <- submit owner do
+    exerciseCmd factoryCid ProveUnpledged with
+      lender
+      invoiceCids = [invoice1Cid, invoice2Cid]
+      periodStart = date 2026 Jan 1
+      periodEnd = date 2026 Jan 31
+
+  lenderInvoices <- query @Invoice lender
+  lenderAttestations <- query @UnpledgedAttestation lender
+
+  assertMsg "Lender must not be a stakeholder of any Invoice" (null lenderInvoices)
+  assertMsg "Lender must see exactly one UnpledgedAttestation" (length lenderAttestations == 1)
+
+  let (_, attestation) = head lenderAttestations
+  assertMsg "Attestation must summarize both settled invoices" (attestation.settledCount == 2)
+  assertMsg "Attestation must sum settled amounts" (attestation.settledTotal == 300.0)
+  assertMsg "All settled invoices must be on time" attestation.allSettledOnTime
+
+  debug ("Lender ACS query: " <> show (length lenderInvoices) <> " invoices, "
+    <> show (length lenderAttestations) <> " attestations")
+
+  pure ()
+
+testFinancing : Script ()
+testFinancing = do
+  sme <- allocatePartyWithHint "SME" (PartyIdHint "SME")
+  debtor <- allocatePartyWithHint "Debtor" (PartyIdHint "Debtor")
+  lender <- allocatePartyWithHint "LenderA" (PartyIdHint "LenderA")
+
+  invoice1Cid <- submitMulti [sme, debtor] [] do
+    createCmd Invoice with
+      owner = sme
+      debtor
+      amount = 100.0
+      dueDate = date 2026 Jan 31
+      invoiceNumber = "INV-001"
+      settledOn = Some (date 2026 Jan 15)
+
+  invoice2Cid <- submitMulti [sme, debtor] [] do
+    createCmd Invoice with
+      owner = sme
+      debtor
+      amount = 200.0
+      dueDate = date 2026 Jan 31
+      invoiceNumber = "INV-002"
+      settledOn = Some (date 2026 Jan 20)
+
+  factoryCid <- submit sme do
+    createCmd AttestationFactory with owner = sme
+
+  attestationCid <- submit sme do
+    exerciseCmd factoryCid ProveUnpledged with
+      lender
+      invoiceCids = [invoice1Cid, invoice2Cid]
+      periodStart = date 2026 Jan 1
+      periodEnd = date 2026 Jan 31
+
+  offerCid <- submit lender do
+    createCmd FinancingOffer with
+      lender
+      sme
+      attestationCid
+      advanceAmount = 150.0
+
+  coordinatorCid <- submit sme do
+    createCmd FinancingCoordinator with sme
+
+  markerCid <- submit sme do
+    exerciseCmd coordinatorCid CompleteFinancing with
+      invoiceCid = invoice1Cid
+      offerCid
+
+  canonicalRef <- submit sme do
+    exerciseCmd invoice1Cid GetCanonicalRef
+
+  lenderMarkers <- query @PledgeMarker lender
+  smeMarkers <- query @PledgeMarker sme
+  lenderInvoices <- query @Invoice lender
+
+  assertMsg "Lender must see exactly one PledgeMarker" (length lenderMarkers == 1)
+  assertMsg "SME must see exactly one PledgeMarker" (length smeMarkers == 1)
+  assertMsg "Lender must still not be a stakeholder of any Invoice" (null lenderInvoices)
+
+  let (_, marker) = head lenderMarkers
+  assertMsg "PledgeMarker must name the lender" (marker.lender == lender)
+  assertMsg "PledgeMarker must name the SME owner" (marker.invoiceOwner == sme)
+  assertMsg "PledgeMarker ref must equal canonical debtor-attested ref"
+    (marker.invoiceRef == canonicalRef)
+  assertMsg "Returned marker cid must match ACS" (fst (head lenderMarkers) == markerCid)
+
+  -- Second financing attempt on the same Invoice must fail (duplicate PledgeMarker key).
+  offer2Cid <- submit lender do
+    createCmd FinancingOffer with
+      lender
+      sme
+      attestationCid
+      advanceAmount = 50.0
+
+  submitMustFail sme do
+    exerciseCmd coordinatorCid CompleteFinancing with
+      invoiceCid = invoice1Cid
+      offerCid = offer2Cid
+
+  lenderMarkersAfter <- query @PledgeMarker lender
+  assertMsg "Duplicate pledge must not create a second PledgeMarker"
+    (length lenderMarkersAfter == 1)
+
+  debug ("Financing complete: canonical ref pledged, duplicate attempt rejected")
+
+  pure ()

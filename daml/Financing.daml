@@ -1,0 +1,73 @@
+module Financing where
+
+import Attestation
+import Invoice
+
+-- Marks a specific invoice (identified by its canonical, debtor-attested ref) as
+-- pledged to a lender. The lender is never made a stakeholder of the Invoice.
+--
+-- Double-pledge prevention: invoiceRef comes from a PledgeIntent bound to signed
+-- Invoice fields, and the PledgeMarker contract key (invoiceOwner, invoiceRef) is
+-- unique. A second financing attempt against the same Invoice produces the same
+-- ref and fails at commit with a duplicate-contract-key error.
+--
+-- Privacy (defense-in-depth): Invoice is never fetched inside any action the
+-- lender informees. PreparePledge runs under FinancingCoordinator (SME-only root
+-- informee); AcceptFinancing fetches only the attestation and PledgeIntent.
+
+template PledgeMarker
+  with
+    invoiceOwner : Party
+    lender : Party
+    invoiceRef : Text
+  where
+    signatory invoiceOwner
+    observer lender
+
+    key (invoiceOwner, invoiceRef) : (Party, Text)
+    maintainer key._1
+
+template FinancingOffer
+  with
+    lender : Party
+    sme : Party
+    attestationCid : ContractId UnpledgedAttestation
+    advanceAmount : Decimal
+  where
+    signatory lender
+    observer sme
+
+    ensure advanceAmount > 0.0
+
+    choice AcceptFinancing : ContractId PledgeMarker
+      with
+        pledgeIntentCid : ContractId PledgeIntent
+      controller sme
+      do
+        attestation <- fetch attestationCid
+        assertMsg "Attestation lender mismatch" (attestation.lender == lender)
+        assertMsg "Attestation SME mismatch" (attestation.owner == sme)
+        intent <- fetch pledgeIntentCid
+        assertMsg "PledgeIntent owner mismatch" (intent.invoiceOwner == sme)
+        markerCid <-
+          create PledgeMarker with
+            invoiceOwner = sme
+            lender
+            invoiceRef = intent.invoiceRef
+        archive pledgeIntentCid
+        pure markerCid
+
+template FinancingCoordinator
+  with
+    sme : Party
+  where
+    signatory sme
+
+    nonconsuming choice CompleteFinancing : ContractId PledgeMarker
+      with
+        invoiceCid : ContractId Invoice
+        offerCid : ContractId FinancingOffer
+      controller sme
+      do
+        pledgeIntentCid <- exercise invoiceCid PreparePledge
+        exercise offerCid AcceptFinancing with pledgeIntentCid

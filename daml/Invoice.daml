@@ -1,0 +1,57 @@
+module Invoice where
+
+-- Stand-in for a content hash: deterministic Text encoding of the fields that
+-- uniquely identify a real-world invoice. No cryptographic hash is available in
+-- the daml-stdlib 2.10.4 prelude (no SHA module in standard dependencies).
+-- Because debtor co-signs the Invoice, any ref derived solely from these fields
+-- is implicitly debtor-attested.
+canonicalInvoiceRef : Party -> Party -> Decimal -> Date -> Text -> Text
+canonicalInvoiceRef owner debtor amount dueDate invoiceNumber =
+  "INVREF-v1:"
+    <> show owner
+    <> "|"
+    <> show debtor
+    <> "|"
+    <> show amount
+    <> "|"
+    <> show dueDate
+    <> "|"
+    <> invoiceNumber
+
+-- SME-only precursor to financing. Created by PreparePledge on Invoice before
+-- any lender-witnessed action runs; carries the canonical ref without exposing
+-- Invoice fields to the lender.
+template PledgeIntent
+  with
+    invoiceOwner : Party
+    invoiceRef : Text
+  where
+    signatory invoiceOwner
+
+template Invoice
+  with
+    owner : Party
+    debtor : Party
+    amount : Decimal
+    dueDate : Date
+    invoiceNumber : Text
+    settledOn : Optional Date
+  where
+    signatory owner, debtor
+
+    ensure amount > 0.0 && invoiceNumber /= ""
+
+    key (owner, invoiceNumber) : (Party, Text)
+    maintainer key._1
+
+    nonconsuming choice GetCanonicalRef : Text
+      controller owner
+      do
+        pure (canonicalInvoiceRef owner debtor amount dueDate invoiceNumber)
+
+    nonconsuming choice PreparePledge : ContractId PledgeIntent
+      controller owner
+      do
+        create PledgeIntent with
+          invoiceOwner = owner
+          invoiceRef = canonicalInvoiceRef owner debtor amount dueDate invoiceNumber

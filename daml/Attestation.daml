@@ -1,0 +1,65 @@
+module Attestation where
+
+import Invoice
+
+template AttestationFactory
+  with
+    owner : Party
+  where
+    signatory owner
+
+    nonconsuming choice ProveUnpledged : ContractId UnpledgedAttestation
+      with
+        lender : Party
+        invoiceCids : [ContractId Invoice]
+        periodStart : Date
+        periodEnd : Date
+      controller owner
+      do
+        (settledCount, settledTotal, allSettledOnTime) <-
+          summarizeInvoices owner periodStart periodEnd invoiceCids
+        create UnpledgedAttestation with
+          owner
+          lender
+          periodStart
+          periodEnd
+          settledCount
+          settledTotal
+          allSettledOnTime
+
+template UnpledgedAttestation
+  with
+    owner : Party
+    lender : Party
+    periodStart : Date
+    periodEnd : Date
+    settledCount : Int
+    settledTotal : Decimal
+    allSettledOnTime : Bool
+  where
+    signatory owner
+    observer lender
+
+summarizeInvoices : Party -> Date -> Date -> [ContractId Invoice] -> Update (Int, Decimal, Bool)
+summarizeInvoices factoryOwner periodStart periodEnd cids =
+  summarizeInvoicesLoop factoryOwner periodStart periodEnd (0, 0.0, True) cids
+
+summarizeInvoicesLoop : Party -> Date -> Date -> (Int, Decimal, Bool) -> [ContractId Invoice] -> Update (Int, Decimal, Bool)
+summarizeInvoicesLoop _ _ _ acc [] = pure acc
+summarizeInvoicesLoop factoryOwner periodStart periodEnd acc (cid :: rest) = do
+  invoice <- fetch cid
+  assertMsg "Invoice owner mismatch" (invoice.owner == factoryOwner)
+  summarizeInvoicesLoop factoryOwner periodStart periodEnd (includeSettledInvoice periodStart periodEnd acc invoice) rest
+
+includeSettledInvoice : Date -> Date -> (Int, Decimal, Bool) -> Invoice -> (Int, Decimal, Bool)
+includeSettledInvoice periodStart periodEnd (count, total, onTime) invoice =
+  case invoice.settledOn of
+    None -> (count, total, onTime)
+    Some settledDate ->
+      if settledDate >= periodStart && settledDate <= periodEnd
+      then
+        ( count + 1
+        , total + invoice.amount
+        , onTime && settledDate <= invoice.dueDate
+        )
+      else (count, total, onTime)
