@@ -6,6 +6,7 @@ const navItems = [
   { to: '/sme', label: 'SME' },
   { to: '/lender', label: 'Lender' },
   { to: '/blocked', label: 'Double-pledge' },
+  { to: '/smoke', label: 'Smoke test' },
 ] as const
 
 export function Layout() {
