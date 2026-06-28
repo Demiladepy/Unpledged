@@ -125,10 +125,16 @@ testFinancing = do
   coordinatorCid <- submit sme do
     createCmd FinancingCoordinator with sme
 
+  registryCid <- submit sme do
+    createCmd PledgeRegistry with
+      owner = sme
+      pledgedRefs = []
+
   markerCid <- submit sme do
     exerciseCmd coordinatorCid CompleteFinancing with
       invoiceCid = invoice1Cid
       offerCid
+      pledgeRegistryCid = registryCid
 
   canonicalRef <- submit sme do
     exerciseCmd invoice1Cid GetCanonicalRef
@@ -148,7 +154,7 @@ testFinancing = do
     (marker.invoiceRef == canonicalRef)
   assertMsg "Returned marker cid must match ACS" (fst (head lenderMarkers) == markerCid)
 
-  -- Second financing attempt on the same Invoice must fail (duplicate PledgeMarker key).
+  -- Second financing attempt on the same Invoice must fail (duplicate ref in registry).
   offer2Cid <- submit lender do
     createCmd FinancingOffer with
       lender
@@ -156,10 +162,17 @@ testFinancing = do
       attestationCid
       advanceAmount = 50.0
 
+  registries <- query @PledgeRegistry sme
+  assertMsg "SME must have exactly one PledgeRegistry" (length registries == 1)
+  let (currentRegistryCid, registry) = head registries
+  assertMsg "Registry must record the pledged ref"
+    (canonicalRef `elem` registry.pledgedRefs)
+
   submitMustFail sme do
     exerciseCmd coordinatorCid CompleteFinancing with
       invoiceCid = invoice1Cid
       offerCid = offer2Cid
+      pledgeRegistryCid = currentRegistryCid
 
   lenderMarkersAfter <- query @PledgeMarker lender
   assertMsg "Duplicate pledge must not create a second PledgeMarker"

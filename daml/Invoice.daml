@@ -41,9 +41,6 @@ template Invoice
 
     ensure amount > 0.0 && invoiceNumber /= ""
 
-    key (owner, invoiceNumber) : (Party, Text)
-    maintainer key._1
-
     nonconsuming choice GetCanonicalRef : Text
       controller owner
       do

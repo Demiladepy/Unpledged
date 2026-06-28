@@ -7,5 +7,5 @@ export const ledgerConfig = {
   wsBaseUrl:
     import.meta.env.VITE_CANTON_LEDGER_WS_URL ??
     'wss://ledger-api.validator.devnet.sandbox.fivenorth.io',
-  userId: import.meta.env.VITE_CANTON_USER_ID ?? 'ledger-api-user',
+  userId: import.meta.env.VITE_CANTON_USER_ID ?? '6',
 } as const

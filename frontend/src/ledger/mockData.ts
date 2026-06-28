@@ -3,17 +3,12 @@ import type {
   FinancingOffer,
   FinancingRequest,
   Invoice,
-  Party,
   PledgeMarker,
   UnpledgedAttestation,
 } from '../types/ledger'
+import { PARTIES } from './parties'
 
-export const PARTIES = {
-  SME: 'SME',
-  DEBTOR: 'Debtor',
-  LENDER_A: 'LenderA',
-  LENDER_B: 'LenderB',
-} as const satisfies Record<string, Party>
+export { PARTIES }
 
 const CANONICAL_REF_INV001 =
   'INVREF-v1:SME|Debtor|100.0|2026-01-31|INV-001'

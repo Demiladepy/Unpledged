@@ -6,14 +6,34 @@ import Invoice
 -- Marks a specific invoice (identified by its canonical, debtor-attested ref) as
 -- pledged to a lender. The lender is never made a stakeholder of the Invoice.
 --
--- Double-pledge prevention: invoiceRef comes from a PledgeIntent bound to signed
--- Invoice fields, and the PledgeMarker contract key (invoiceOwner, invoiceRef) is
--- unique. A second financing attempt against the same Invoice produces the same
--- ref and fails at commit with a duplicate-contract-key error.
+-- Double-pledge prevention (LF 2.x — contract keys unavailable): PledgeRegistry
+-- tracks pledged refs per SME; RecordPledge rejects duplicate invoiceRef.
 --
 -- Privacy (defense-in-depth): Invoice is never fetched inside any action the
 -- lender informees. PreparePledge runs under FinancingCoordinator (SME-only root
 -- informee); AcceptFinancing fetches only the attestation and PledgeIntent.
+
+template PledgeRegistry
+  with
+    owner : Party
+    pledgedRefs : [Text]
+  where
+    signatory owner
+
+    choice RecordPledge : ContractId PledgeMarker
+      with
+        lender : Party
+        invoiceRef : Text
+      controller owner
+      do
+        assertMsg "Invoice already pledged" (invoiceRef `notElem` pledgedRefs)
+        _ <- create PledgeRegistry with
+          owner
+          pledgedRefs = invoiceRef :: pledgedRefs
+        create PledgeMarker with
+          invoiceOwner = owner
+          lender
+          invoiceRef
 
 template PledgeMarker
   with
@@ -23,9 +43,6 @@ template PledgeMarker
   where
     signatory invoiceOwner
     observer lender
-
-    key (invoiceOwner, invoiceRef) : (Party, Text)
-    maintainer key._1
 
 template FinancingOffer
   with
@@ -42,6 +59,7 @@ template FinancingOffer
     choice AcceptFinancing : ContractId PledgeMarker
       with
         pledgeIntentCid : ContractId PledgeIntent
+        pledgeRegistryCid : ContractId PledgeRegistry
       controller sme
       do
         attestation <- fetch attestationCid
@@ -50,8 +68,7 @@ template FinancingOffer
         intent <- fetch pledgeIntentCid
         assertMsg "PledgeIntent owner mismatch" (intent.invoiceOwner == sme)
         markerCid <-
-          create PledgeMarker with
-            invoiceOwner = sme
+          exercise pledgeRegistryCid RecordPledge with
             lender
             invoiceRef = intent.invoiceRef
         archive pledgeIntentCid
@@ -67,7 +84,10 @@ template FinancingCoordinator
       with
         invoiceCid : ContractId Invoice
         offerCid : ContractId FinancingOffer
+        pledgeRegistryCid : ContractId PledgeRegistry
       controller sme
       do
         pledgeIntentCid <- exercise invoiceCid PreparePledge
-        exercise offerCid AcceptFinancing with pledgeIntentCid
+        exercise offerCid AcceptFinancing with
+          pledgeIntentCid
+          pledgeRegistryCid

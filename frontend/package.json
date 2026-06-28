@@ -8,7 +8,12 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "smoke:ledger": "tsx server/smokeTest.ts"
+    "smoke:ledger": "tsx server/smokeTest.ts",
+    "allocate:parties": "tsx server/allocateParties.ts",
+    "create:invoice": "tsx server/firstCreate.ts",
+    "grant:act-as": "tsx server/grantActAs.ts",
+    "create:attestation": "tsx server/createAttestation.ts",
+    "create:financing": "tsx server/createFinancing.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

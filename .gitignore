@@ -1,0 +1,6 @@
+# Daml build cache & SDK dependencies (long paths break git on Windows)
+.daml/
+
+# Env secrets
+frontend/.env
+frontend/.env.server
