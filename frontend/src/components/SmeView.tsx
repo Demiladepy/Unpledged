@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { listFinancingRequests, listInvoices } from '../ledger/api'
 import { PARTIES, partyDisplayName } from '../ledger/parties'
 import type { FinancingRequest, Invoice } from '../types/ledger'
-import { IconArrowRight, IconDocument } from './icons'
+import { CopyableId } from './CopyableId'
+import { IconArrowRight } from './icons'
 import { PageHeader } from './PageHeader'
 
 function formatCurrency(amount: number): string {
@@ -42,60 +43,113 @@ export function SmeView() {
       <PageHeader
         eyebrow="Party view"
         title={`SME — ${partyDisplayName(PARTIES.SME)}`}
-        lead="Receivables portfolio and financing requests."
+        lead="Receivables portfolio. Financing routes through attestation — lenders never see raw invoice fields unless stakeholder."
       />
 
-      {loading ? (
-        <p className="text-sm text-ink-500">Loading…</p>
-      ) : (
-        <div className="card overflow-hidden">
-          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-4 border-b border-white/8 bg-surface-850/50 px-5 py-3 text-xs font-medium text-ink-500">
-            <span>Invoice</span>
-            <span>Debtor</span>
-            <span>Amount</span>
-            <span>Due</span>
-            <span />
-          </div>
-          {invoices.map((inv) => {
-            const req = requests.find((r) => r.invoiceNumber === inv.invoiceNumber)
-            const funded = req?.status === 'funded'
-            return (
-              <div
-                key={inv.contractId}
-                className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] items-center gap-4 border-b border-white/6 px-5 py-3.5 last:border-b-0"
-              >
-                <span className="font-mono text-sm text-ink-100">{inv.invoiceNumber}</span>
-                <span className="font-mono text-sm text-ink-400">{inv.debtor}</span>
-                <span className="text-sm tabular-nums text-ink-100">
-                  {formatCurrency(inv.amount)}
-                </span>
-                <span className="font-mono text-sm text-ink-400">{inv.dueDate}</span>
-                <button
-                  type="button"
-                  disabled={funded}
-                  className={[
-                    'flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors',
-                    funded
-                      ? 'cursor-not-allowed bg-surface-700/80 text-ink-500'
-                      : 'btn-primary',
-                  ].join(' ')}
-                >
-                  {funded ? 'Financed' : 'Request financing'}
-                  {!funded && <IconArrowRight className="h-3.5 w-3.5" />}
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      <div className="mt-5 flex items-start gap-2 text-sm text-ink-500">
-        <IconDocument className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          Invoices are co-signed by debtor. Financing routes through attestation and
-          pledge — lenders never see raw invoice data unless they are stakeholders.
-        </p>
+      <div className="mb-6">
+        <CopyableId value={PARTIES.SME} label="Party ID" />
       </div>
+
+      {loading ? (
+        <p className="text-sm text-ink-muted">Loading…</p>
+      ) : (
+        <>
+          <div className="space-y-3 md:hidden">
+            {invoices.map((inv) => {
+              const req = requests.find((r) => r.invoiceNumber === inv.invoiceNumber)
+              const funded = req?.status === 'funded'
+              return (
+                <article key={inv.contractId} className="pane p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="data-label">Invoice</p>
+                      <p className="mt-1 font-mono text-base text-ink-100">
+                        {inv.invoiceNumber}
+                      </p>
+                    </div>
+                    <span
+                      className={[
+                        'badge-status shrink-0',
+                        funded ? 'badge-financed' : 'badge-outstanding',
+                      ].join(' ')}
+                    >
+                      {funded ? 'Financed' : 'Outstanding'}
+                    </span>
+                  </div>
+                  <dl className="mt-4 space-y-3 border-t border-white/[0.06] pt-4">
+                    <div>
+                      <dt className="data-label">Amount</dt>
+                      <dd className="mt-1 font-mono text-lime">
+                        {formatCurrency(inv.amount)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="data-label">Due</dt>
+                      <dd className="mt-1 font-mono text-sm text-ink-muted">{inv.dueDate}</dd>
+                    </div>
+                    <div>
+                      <dt className="data-label">Contract</dt>
+                      <dd className="mt-1">
+                        <CopyableId value={inv.contractId} />
+                      </dd>
+                    </div>
+                  </dl>
+                  <button
+                    type="button"
+                    disabled={funded}
+                    className="btn-lime mt-4 w-full justify-center"
+                  >
+                    Request financing
+                    {!funded && <IconArrowRight className="h-3.5 w-3.5" />}
+                  </button>
+                </article>
+              )
+            })}
+          </div>
+
+          <div className="pane hidden overflow-x-auto md:block">
+            <div className="data-table-head min-w-[720px] grid-cols-[1.2fr_1.5fr_1fr_1fr_0.8fr_auto]">
+              <span>Invoice</span>
+              <span>Contract</span>
+              <span>Amount</span>
+              <span>Due</span>
+              <span>Status</span>
+              <span />
+            </div>
+            {invoices.map((inv) => {
+              const req = requests.find((r) => r.invoiceNumber === inv.invoiceNumber)
+              const funded = req?.status === 'funded'
+              return (
+                <div
+                  key={inv.contractId}
+                  className="data-table-row min-w-[720px] grid-cols-[1.2fr_1.5fr_1fr_1fr_0.8fr_auto]"
+                >
+                  <span className="font-mono text-sm text-ink-100">{inv.invoiceNumber}</span>
+                  <span className="font-mono text-xs text-ink-muted" title={inv.contractId}>
+                    {inv.contractId.slice(0, 14)}…
+                  </span>
+                  <span className="font-mono text-sm tabular-nums text-ink-100">
+                    {formatCurrency(inv.amount)}
+                  </span>
+                  <span className="font-mono text-sm text-ink-muted">{inv.dueDate}</span>
+                  <span
+                    className={[
+                      'badge-status w-fit',
+                      funded ? 'badge-financed' : 'badge-outstanding',
+                    ].join(' ')}
+                  >
+                    {funded ? 'Financed' : 'Outstanding'}
+                  </span>
+                  <button type="button" disabled={funded} className="btn-lime">
+                    Request financing
+                    {!funded && <IconArrowRight className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

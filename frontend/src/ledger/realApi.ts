@@ -27,12 +27,34 @@ import { CHOICE_NAMES, TEMPLATE_IDS, TEMPLATE_QUERY_IDS } from './packageId'
 // package-id hash (3a6372bf…). Proven on live DevNet via server/ scripts.
 // ---------------------------------------------------------------------------
 
+/** Reuse ledger-end across parallel ACS queries (avoids 8–10 redundant round trips). */
+let cachedLedgerEnd: { offset: number; fetchedAt: number } | null = null
+let ledgerEndInFlight: Promise<number> | null = null
+const LEDGER_END_TTL_MS = 10_000
+
 async function getLedgerEndOffset(): Promise<number> {
-  const { data, error } = await ledgerClient.GET('/v2/state/ledger-end')
-  if (error) {
-    throw new Error(`GET /v2/state/ledger-end failed: ${JSON.stringify(error)}`)
+  const now = Date.now()
+  if (cachedLedgerEnd && now - cachedLedgerEnd.fetchedAt < LEDGER_END_TTL_MS) {
+    return cachedLedgerEnd.offset
   }
-  return data?.offset ?? 0
+
+  if (!ledgerEndInFlight) {
+    ledgerEndInFlight = (async () => {
+      const { data, error } = await ledgerClient.GET('/v2/state/ledger-end')
+      if (error) {
+        throw new Error(
+          `GET /v2/state/ledger-end failed: ${JSON.stringify(error)}`,
+        )
+      }
+      const offset = data?.offset ?? 0
+      cachedLedgerEnd = { offset, fetchedAt: Date.now() }
+      return offset
+    })().finally(() => {
+      ledgerEndInFlight = null
+    })
+  }
+
+  return ledgerEndInFlight
 }
 
 function templateFilter(

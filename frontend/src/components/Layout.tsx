@@ -1,86 +1,164 @@
-import { NavLink, Outlet } from 'react-router-dom'
-import logo from '../assets/logo.png'
+import { useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ledgerConfig } from '../ledger/config'
+import { PARTIES, partyDisplayName } from '../ledger/parties'
+import { CopyableId } from './CopyableId'
+import { IconMenu, IconX } from './icons'
+import { LiveBadge } from './LiveBadge'
 
 const navItems = [
-  { to: '/', label: 'Privacy proof' },
+  { to: '/', label: 'Privacy' },
   { to: '/sme', label: 'SME' },
   { to: '/lender', label: 'Lender' },
-  { to: '/blocked', label: 'Double-pledge' },
-  { to: '/smoke', label: 'Diagnostics' },
+  { to: '/blocked', label: 'Blocked' },
+  { to: '/smoke', label: 'Diag' },
 ] as const
 
+function actingPartyForPath(pathname: string): { label: string; party: string } {
+  if (pathname.startsWith('/sme')) {
+    return { label: 'Acting party', party: PARTIES.SME }
+  }
+  if (pathname.startsWith('/lender')) {
+    return { label: 'Acting party', party: PARTIES.LENDER_A }
+  }
+  if (pathname.startsWith('/blocked')) {
+    return { label: 'Attempting party', party: PARTIES.LENDER_A }
+  }
+  if (pathname.startsWith('/smoke')) {
+    return { label: 'API user', party: `user:${ledgerConfig.userId}` }
+  }
+  return { label: 'Comparison', party: `${PARTIES.LENDER_A} vs ${PARTIES.LENDER_B}` }
+}
+
 export function Layout() {
+  const { pathname } = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const acting = actingPartyForPath(pathname)
   const live = !ledgerConfig.useMocks
+  const showPartyId =
+    acting.party.includes('::') && !acting.party.includes(' vs ')
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-20 border-b border-white/8 bg-surface-900/75 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-6 px-6 py-3.5">
-          <div className="flex min-w-0 items-center gap-4">
-            <img
-              src={logo}
-              alt="Unpledged"
-              className="h-11 w-11 shrink-0 rounded-xl object-cover ring-1 ring-white/10"
-            />
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-bg/95 backdrop-blur-sm">
+        <div className="mx-auto max-w-[1680px] px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
+          <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold tracking-tight text-ink-100">
-                  Unpledged
-                </h1>
-                <span
-                  className={[
-                    'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                    live
-                      ? 'bg-positive/15 text-positive ring-1 ring-positive/25'
-                      : 'bg-warning/15 text-warning ring-1 ring-warning/25',
-                  ].join(' ')}
-                >
-                  {live ? 'Live DevNet' : 'Mock mode'}
-                </span>
-              </div>
-              <p className="truncate text-xs text-ink-500">
-                Confidential receivables · Canton Network
+              <p className="font-display text-base font-semibold tracking-tight text-ink-100 sm:text-lg">
+                Unpledged
               </p>
+              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+                Canton Network
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <LiveBadge />
+              <button
+                type="button"
+                className="border border-white/10 p-2 text-ink-200 lg:hidden"
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-expanded={menuOpen}
+                aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              >
+                {menuOpen ? (
+                  <IconX className="h-5 w-5" />
+                ) : (
+                  <IconMenu className="h-5 w-5" />
+                )}
+              </button>
             </div>
           </div>
 
-          <nav className="flex shrink-0 gap-1 rounded-xl bg-surface-850/80 p-1 ring-1 ring-white/6">
-            {navItems.map(({ to, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-                className={({ isActive }) =>
-                  [
-                    'rounded-lg px-3.5 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-white/10 text-ink-100 shadow-sm'
-                      : 'text-ink-400 hover:bg-white/5 hover:text-ink-200',
-                  ].join(' ')
-                }
-              >
-                {label}
-              </NavLink>
-            ))}
-          </nav>
+          <div className="mt-3 hidden items-center justify-between gap-4 lg:flex">
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+                {acting.label}
+              </p>
+              {showPartyId ? (
+                <CopyableId value={acting.party} className="mt-1" />
+              ) : (
+                <p className="mt-1 font-display text-xs font-medium uppercase tracking-wider text-ink-300">
+                  {pathname === '/'
+                    ? `${partyDisplayName(PARTIES.LENDER_A)} / ${partyDisplayName(PARTIES.LENDER_B)}`
+                    : acting.party}
+                </p>
+              )}
+            </div>
+
+            <nav className="flex shrink-0 border border-white/10">
+              {navItems.map(({ to, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  className={({ isActive }) =>
+                    [
+                      'border-r border-white/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.08em] last:border-r-0 transition-colors',
+                      isActive
+                        ? 'bg-lime text-bg'
+                        : 'text-ink-muted hover:bg-white/[0.03] hover:text-ink-200',
+                    ].join(' ')
+                  }
+                >
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+
+          {menuOpen ? (
+            <nav className="mt-3 grid grid-cols-2 gap-px border border-white/10 bg-white/10 lg:hidden">
+              {navItems.map(({ to, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) =>
+                    [
+                      'bg-bg px-4 py-3 text-center text-xs font-medium uppercase tracking-[0.08em] transition-colors',
+                      isActive ? 'text-lime' : 'text-ink-muted',
+                    ].join(' ')
+                  }
+                >
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+          ) : null}
+
+          <div className="mt-3 border-t border-white/[0.06] pt-3 lg:hidden">
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+              {acting.label}
+            </p>
+            {showPartyId ? (
+              <CopyableId value={acting.party} className="mt-1 flex-wrap" />
+            ) : (
+              <p className="mt-1 text-xs text-ink-300">
+                {pathname === '/'
+                  ? `${partyDisplayName(PARTIES.LENDER_A)} / ${partyDisplayName(PARTIES.LENDER_B)}`
+                  : acting.party}
+              </p>
+            )}
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1600px] flex-1 px-6 py-8">
+      <main className="mx-auto w-full max-w-[1680px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <Outlet />
       </main>
 
-      <footer className="border-t border-white/6 px-6 py-4">
-        <p className="text-center text-xs text-ink-500">
+      <footer className="border-t border-white/10 px-4 py-4 sm:px-8">
+        <p className="text-center text-[11px] leading-relaxed text-ink-dim">
           {live ? (
             <>
-              Connected to Canton DevNet ·{' '}
+              Ledger queries against Canton DevNet ·{' '}
               <a
                 href="https://lighthouse.devnet.cantonloop.com/"
                 target="_blank"
                 rel="noreferrer"
-                className="text-accent-bright hover:underline"
+                className="text-ink-muted underline decoration-white/20 underline-offset-2 hover:text-lime"
               >
                 Lighthouse explorer
               </a>
@@ -88,9 +166,7 @@ export function Layout() {
           ) : (
             <>
               Mock ledger — set{' '}
-              <code className="rounded bg-surface-800 px-1.5 py-0.5 font-mono text-[11px] text-ink-300">
-                VITE_USE_MOCKS=false
-              </code>{' '}
+              <code className="font-mono text-ink-muted">VITE_USE_MOCKS=false</code>{' '}
               for live data
             </>
           )}

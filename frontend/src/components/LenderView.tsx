@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { getAttestation, getLenderView } from '../ledger/api'
 import { PARTIES, partyDisplayName } from '../ledger/parties'
 import type { LenderView, UnpledgedAttestation } from '../types/ledger'
-import { IconBuilding, IconCheck } from './icons'
+import { CopyableId } from './CopyableId'
 import { PageHeader } from './PageHeader'
 
 function formatCurrency(amount: number): string {
@@ -40,33 +40,39 @@ export function LenderViewPage() {
       <PageHeader
         eyebrow="Party view"
         title={`Lender — ${partyDisplayName(PARTIES.LENDER_A)}`}
-        lead="Incoming requests funded against unpledged attestation summary only."
+        lead="Financing decisions based on attestation summary only. No invoice line items, amounts per invoice, or debtor fields are disclosed."
       />
 
+      <div className="mb-8">
+        <CopyableId value={PARTIES.LENDER_A} label="Party ID" />
+      </div>
+
       {loading || !view ? (
-        <p className="text-sm text-ink-500">Loading…</p>
+        <p className="text-sm text-ink-muted">Loading…</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <section className="card overflow-hidden">
-            <div className="border-b border-white/8 px-5 py-3">
-              <h3 className="text-sm font-medium text-ink-200">Pending offers</h3>
+        <div className="grid gap-px border border-white/10 bg-white/10 lg:grid-cols-2">
+          <section className="bg-bg-pane">
+            <div className="border-b border-white/10 px-6 py-4">
+              <h3 className="text-xs font-medium uppercase tracking-[0.12em] text-ink-muted">
+                Pending offers
+              </h3>
             </div>
             {view.pendingOffers.length === 0 ? (
-              <p className="px-5 py-8 text-sm text-ink-500">No pending financing offers.</p>
+              <p className="px-6 py-10 text-sm text-ink-muted">No pending financing offers.</p>
             ) : (
               view.pendingOffers.map((offer) => (
                 <div
                   key={offer.contractId}
-                  className="border-b border-white/6 px-5 py-4 last:border-b-0"
+                  className="border-b border-white/[0.06] px-6 py-5 last:border-b-0"
                 >
-                  <p className="font-mono text-xs text-ink-300">{offer.contractId}</p>
-                  <p className="mt-1 text-sm text-ink-400">
-                    Advance:{' '}
-                    <span className="tabular-nums text-ink-200">
-                      {formatCurrency(offer.advanceAmount)}
-                    </span>
+                  <CopyableId value={offer.contractId} label="Offer CID" />
+                  <p className="mt-4 text-xs text-ink-muted">
+                    Advance
                   </p>
-                  <button type="button" className="btn-primary mt-3">
+                  <p className="font-mono text-lg text-lime">
+                    {formatCurrency(offer.advanceAmount)}
+                  </p>
+                  <button type="button" className="btn-lime mt-5">
                     Fund
                   </button>
                 </div>
@@ -74,44 +80,48 @@ export function LenderViewPage() {
             )}
           </section>
 
-          <section className="card card-accent overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-white/8 bg-accent-soft/30 px-5 py-3">
-              <IconBuilding className="h-4 w-4 text-accent-bright" />
-              <h3 className="text-sm font-medium text-ink-100">Unpledged attestation</h3>
+          <section className="bg-bg-pane">
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+              <h3 className="text-xs font-medium uppercase tracking-[0.12em] text-ink-muted">
+                Unpledged attestation
+              </h3>
+              <span className="visibility-granted">Summary only</span>
             </div>
             {attestation ? (
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 px-5 py-5">
-                <div>
-                  <dt className="label-muted">Period</dt>
-                  <dd className="mt-1 font-mono text-sm text-ink-100">
+              <dl className="px-6 py-2">
+                <div className="data-row">
+                  <dt className="data-label">Period</dt>
+                  <dd className="font-mono text-sm text-ink-100">
                     {attestation.periodStart} — {attestation.periodEnd}
                   </dd>
                 </div>
-                <div>
-                  <dt className="label-muted">Settled count</dt>
-                  <dd className="mt-1 text-sm tabular-nums text-ink-100">
+                <div className="data-row">
+                  <dt className="data-label">Settled count</dt>
+                  <dd className="font-mono text-sm text-ink-100">
                     {attestation.settledCount}
                   </dd>
                 </div>
-                <div>
-                  <dt className="label-muted">Settled total</dt>
-                  <dd className="mt-1 text-sm tabular-nums text-ink-100">
+                <div className="data-row">
+                  <dt className="data-label">Settled total</dt>
+                  <dd className="font-mono text-sm text-lime">
                     {formatCurrency(attestation.settledTotal)}
                   </dd>
                 </div>
-                <div>
-                  <dt className="label-muted">On time</dt>
-                  <dd className="mt-1 flex items-center gap-1 text-sm font-medium text-positive">
-                    {attestation.allSettledOnTime && <IconCheck className="h-4 w-4" />}
-                    {attestation.allSettledOnTime ? 'Yes' : 'No'}
+                <div className="data-row">
+                  <dt className="data-label">On time</dt>
+                  <dd className="font-mono text-sm text-ink-100">
+                    {attestation.allSettledOnTime ? 'TRUE' : 'FALSE'}
                   </dd>
+                </div>
+                <div className="border-t border-white/[0.06] py-5">
+                  <CopyableId value={attestation.contractId} label="Attestation CID" />
                 </div>
               </dl>
             ) : (
-              <p className="px-5 py-8 text-sm text-ink-500">No attestation on file.</p>
+              <p className="px-6 py-10 text-sm text-ink-muted">No attestation on file.</p>
             )}
-            <p className="border-t border-white/6 px-5 py-3 text-xs leading-relaxed text-ink-500">
-              Underlying invoice fields are not disclosed. Lender sees derived summary only.
+            <p className="border-t border-white/10 px-6 py-4 text-xs leading-relaxed text-ink-dim">
+              Invoice fields not in scope for this party. Derived aggregate only.
             </p>
           </section>
         </div>

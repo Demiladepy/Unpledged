@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 
+import homeBg from '../assets/home-bg.png'
 import { getLenderView, listPledgeMarkers } from '../ledger/api'
-import { PARTIES, partyDisplayName } from '../ledger/parties'
+import { PARTIES } from '../ledger/parties'
 import type { UnpledgedAttestation } from '../types/ledger'
-import { IconDocument, IconEyeOff } from './icons'
-import { PageHeader } from './PageHeader'
+import { CopyableId } from './CopyableId'
+import { LiveBadge } from './LiveBadge'
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -15,129 +16,94 @@ function formatCurrency(amount: number): string {
 }
 
 function formatFetchError(message: string): string {
-  if (message.toLowerCase().includes('failed to fetch')) {
+  const lower = message.toLowerCase()
+  if (lower.includes('failed to fetch') || lower.includes('cors')) {
     return [
-      "Couldn't reach the ledger API.",
+      "Couldn't reach the ledger API from the browser.",
       '',
-      'Run npm run dev (not preview) so the /api/token proxy is active,',
-      'then reload this page.',
+      'Ensure npm run dev is running and reload this page.',
+      'Ledger calls are proxied via /api/ledger to avoid CORS.',
     ].join('\n')
   }
   return message
 }
 
-function AttestationCard({ attestation }: { attestation: UnpledgedAttestation }) {
-  return (
-    <div className="card card-accent overflow-hidden">
-      <div className="border-b border-white/8 bg-accent-soft/40 px-5 py-3">
-        <p className="text-sm font-medium text-accent-bright">
-          Unpledged attestation
-        </p>
-        <p className="mt-0.5 text-xs text-ink-400">Summary only — no invoice fields</p>
-      </div>
-      <dl className="divide-y divide-white/6 px-5">
-        <div className="py-3.5">
-          <dt className="label-muted">Period</dt>
-          <dd className="mt-1 font-mono text-sm text-ink-100">
-            {attestation.periodStart} — {attestation.periodEnd}
-          </dd>
-        </div>
-        <div className="py-3.5">
-          <dt className="label-muted">Settled</dt>
-          <dd className="mt-1 text-sm tabular-nums text-ink-100">
-            {attestation.settledCount} invoice{attestation.settledCount === 1 ? '' : 's'}{' '}
-            · {formatCurrency(attestation.settledTotal)}
-          </dd>
-        </div>
-        <div className="py-3.5">
-          <dt className="label-muted">On time</dt>
-          <dd className="mt-1 text-sm font-medium text-positive">
-            {attestation.allSettledOnTime ? 'Yes' : 'No'}
-          </dd>
-        </div>
-      </dl>
-    </div>
-  )
-}
-
-function NoVisibilityPanel({
-  partyLabel,
-  invoiceCount,
-  attestationCount,
-  pledgeRef,
+function DataRow({
+  label,
+  value,
+  highlight,
 }: {
-  partyLabel: string
-  invoiceCount: number
-  attestationCount: number
-  pledgeRef: string
+  label: string
+  value: ReactNode
+  highlight?: boolean
 }) {
   return (
-    <div className="card flex min-h-[320px] flex-col overflow-hidden border-dashed border-negative/30">
-      <div className="border-b border-negative/20 bg-negative/8 px-5 py-4">
-        <p className="text-sm font-medium text-negative">No visibility</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums text-ink-100">
-          {invoiceCount} invoices · {attestationCount} attestations
-        </p>
-        <p className="text-xs text-ink-400">in {partyLabel}&apos;s ACS view</p>
-      </div>
-      <div className="flex flex-1 flex-col justify-center px-6 py-8 text-center">
-        <p className="text-sm leading-relaxed text-ink-400">
-          SME receivables for{' '}
-          <span className="font-mono text-ink-200">INV-001</span> exist on the
-          ledger, but are{' '}
-          <span className="font-medium text-ink-100">structurally invisible</span>{' '}
-          to {partyLabel}.
-        </p>
-        {pledgeRef ? (
-          <p className="mt-4 font-mono text-[11px] leading-relaxed text-ink-500">
-            LenderA pledge ref (not visible here): {pledgeRef.slice(0, 48)}…
-          </p>
-        ) : null}
-        <p className="mt-2 text-xs text-ink-500">
-          Not a stakeholder. Not divulged. Not in query results.
-        </p>
-      </div>
+    <div className="data-row">
+      <dt className="data-label">{label}</dt>
+      <dd
+        className={[
+          'font-mono text-sm sm:text-right',
+          highlight ? 'text-lime' : 'text-ink-100',
+        ].join(' ')}
+      >
+        {value}
+      </dd>
     </div>
   )
 }
 
-function LenderPanel({
-  title,
-  party,
-  accent,
+function AttestationRows({ attestation }: { attestation: UnpledgedAttestation }) {
+  return (
+    <dl>
+      <DataRow
+        label="Period"
+        value={`${attestation.periodStart} — ${attestation.periodEnd}`}
+      />
+      <DataRow label="Settled count" value={attestation.settledCount} />
+      <DataRow
+        label="Settled total"
+        value={formatCurrency(attestation.settledTotal)}
+        highlight
+      />
+      <DataRow
+        label="All settled on time"
+        value={attestation.allSettledOnTime ? 'TRUE' : 'FALSE'}
+      />
+      <DataRow label="Invoices in ACS" value="0" />
+    </dl>
+  )
+}
+
+function LenderPane({
+  side,
+  partyId,
+  visibility,
   children,
 }: {
-  title: string
-  party: string
-  accent: 'visible' | 'absent'
+  side: 'A' | 'B'
+  partyId: string
+  visibility: 'granted' | 'none'
   children: ReactNode
 }) {
   return (
-    <section
-      className={[
-        'card flex flex-col overflow-hidden',
-        accent === 'visible' ? 'card-accent' : '',
-      ].join(' ')}
-    >
-      <header className="flex items-center justify-between border-b border-white/8 px-5 py-4">
-        <div>
-          <p className="label-muted">{title}</p>
-          <p className="mt-0.5 font-mono text-base font-semibold text-ink-100">
-            {party}
-          </p>
+    <section className="pane flex min-h-0 flex-col sm:min-h-[420px] lg:min-h-[480px]">
+      <header className="pane-header flex-col items-stretch gap-3 sm:flex-row sm:items-start">
+        <div className="min-w-0">
+          <h3 className="pane-title">Lender {side}</h3>
+          <div className="mt-3">
+            <CopyableId value={partyId} label="Party ID" />
+          </div>
         </div>
         <span
           className={[
-            'rounded-full px-2.5 py-1 text-[11px] font-semibold',
-            accent === 'visible'
-              ? 'bg-accent-soft text-accent-bright ring-1 ring-accent/30'
-              : 'bg-surface-700/80 text-ink-400 ring-1 ring-white/6',
+            'shrink-0 self-start',
+            visibility === 'granted' ? 'visibility-granted' : 'visibility-none',
           ].join(' ')}
         >
-          {accent === 'visible' ? 'Has attestation' : 'No visibility'}
+          Visibility: {visibility === 'granted' ? 'Granted' : 'None'}
         </span>
       </header>
-      <div className="flex-1 p-5">{children}</div>
+      <div className="pane-body flex flex-1 flex-col">{children}</div>
     </section>
   )
 }
@@ -184,97 +150,125 @@ export function SplitScreenComparison() {
   }, [])
 
   const attestationA = viewA?.attestations[0]
+  const invoiceCountB = viewB?.invoices.length ?? 0
+  const attestationCountB = viewB?.attestations.length ?? 0
+  const contractCountB = invoiceCountB + attestationCountB
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Selective disclosure"
-        title="Privacy proof"
-        lead="Live per-party ACS on DevNet. LenderA sees the unpledged attestation summary only — zero invoices. LenderB sees nothing for this SME receivable."
+    <div className="home-hero -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div
+        className="home-hero-bg"
+        style={{ backgroundImage: `url(${homeBg})` }}
+        aria-hidden
       />
+      <div className="home-hero-fade" aria-hidden />
 
-      {loading ? (
-        <div className="card flex items-center gap-3 px-5 py-4">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-          <p className="text-sm text-ink-400">Loading party views from ledger…</p>
-        </div>
-      ) : error ? (
-        <div className="card overflow-hidden border-negative/30">
-          <div className="border-b border-negative/20 bg-negative/10 px-5 py-3">
-            <p className="text-sm font-medium text-negative">Ledger connection failed</p>
-          </div>
-          <pre className="overflow-x-auto px-5 py-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-ink-300">
-            {formatFetchError(error)}
-          </pre>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_auto_1fr] lg:gap-6">
-          <LenderPanel
-            title="Financing party"
-            party={partyDisplayName(PARTIES.LENDER_A)}
-            accent="visible"
-          >
-            {attestationA ? (
-              <AttestationCard attestation={attestationA} />
-            ) : (
-              <p className="text-sm text-ink-500">No attestation in ACS.</p>
-            )}
-            <p className="mt-4 text-xs text-ink-500">
-              Invoices in ACS:{' '}
-              <span className="font-mono text-ink-300">{viewA?.invoices.length ?? 0}</span>
+      <div className="relative z-10">
+        <div className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-xl">
+            <p className="page-eyebrow">Selective disclosure</p>
+            <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight text-ink-100 sm:text-3xl lg:text-4xl">
+              Per-party ledger view
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-ink-muted sm:text-base">
+              Live ACS queries on Canton DevNet — same invoice, different party
+              projections.
             </p>
-          </LenderPanel>
+          </div>
+          <LiveBadge />
+        </div>
 
-          <div className="flex flex-col items-center justify-center px-2 py-4 lg:px-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-800 ring-1 ring-white/10">
-              <IconDocument className="h-6 w-6 text-accent-bright" />
+        <div className="pane mb-6 border-white/15 bg-bg/80 px-4 py-3 backdrop-blur-sm sm:mb-8 sm:px-5">
+          <CopyableId value="INV-001" label="Invoice context" />
+          <p className="mt-2 text-xs text-ink-muted">
+            On-ledger receivable · visible to SME and Debtor stakeholders only
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="pane bg-bg/90 px-5 py-5 backdrop-blur-sm">
+            <p className="text-sm text-ink-muted">Querying active contract sets…</p>
+          </div>
+        ) : error ? (
+          <div className="pane bg-bg/90 backdrop-blur-sm">
+            <div className="border-b border-white/10 px-5 py-3 sm:px-6">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-negative">
+                Ledger connection failed
+              </p>
             </div>
-            <p className="mt-3 text-center font-mono text-sm font-medium text-ink-100">
-              INV-001
-            </p>
-            <p className="mt-1 text-center text-xs text-ink-500">
-              On ledger (SME + Debtor only)
-            </p>
-            <p className="mt-4 max-w-[10rem] text-center text-xs leading-snug text-ink-500">
-              Same invoice. Different party projections.
-            </p>
+            <pre className="terminal-block">{formatFetchError(error)}</pre>
           </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-px lg:border lg:border-white/10 lg:bg-white/10">
+              <LenderPane
+                side="A"
+                partyId={PARTIES.LENDER_A}
+                visibility="granted"
+              >
+                {attestationA ? (
+                  <>
+                    <p className="mb-4 text-xs text-ink-muted">
+                      Unpledged attestation · summary fields only
+                    </p>
+                    <AttestationRows attestation={attestationA} />
+                    {attestationA.contractId ? (
+                      <div className="mt-auto border-t border-white/10 pt-5">
+                        <CopyableId
+                          value={attestationA.contractId}
+                          label="Attestation CID"
+                        />
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-ink-muted">No attestation in ACS.</p>
+                )}
+              </LenderPane>
 
-          <LenderPanel
-            title="Non-financing party"
-            party={partyDisplayName(PARTIES.LENDER_B)}
-            accent="absent"
-          >
-            <NoVisibilityPanel
-              partyLabel={partyDisplayName(PARTIES.LENDER_B)}
-              invoiceCount={viewB?.invoices.length ?? 0}
-              attestationCount={viewB?.attestations.length ?? 0}
-              pledgeRef={pledgeRef}
-            />
-          </LenderPanel>
-        </div>
-      )}
+              <LenderPane
+                side="B"
+                partyId={PARTIES.LENDER_B}
+                visibility="none"
+              >
+                <div className="flex flex-1 flex-col items-center justify-center border border-white/[0.06] px-4 py-12 text-center sm:px-8 sm:py-16">
+                  <p className="font-display text-xl font-semibold uppercase tracking-[0.06em] text-ink-300 sm:text-2xl lg:text-3xl">
+                    No visibility
+                  </p>
+                  <p className="mt-4 font-mono text-sm text-denied">
+                    · {contractCountB} contracts in your ledger view
+                  </p>
+                  <p className="mt-6 max-w-sm text-sm leading-relaxed text-ink-muted">
+                    INV-001 exists on the ledger. Lender B is not a stakeholder and
+                    receives no attestation, invoice, or pledge data in ACS queries.
+                  </p>
+                  {pledgeRef ? (
+                    <p className="mt-4 text-xs text-ink-dim">
+                      Lender A pledge ref not disclosed to this party
+                    </p>
+                  ) : null}
+                </div>
+              </LenderPane>
+            </div>
 
-      {!loading && !error ? (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="card flex items-start gap-3 px-5 py-4">
-            <IconDocument className="mt-0.5 h-4 w-4 shrink-0 text-accent-bright" />
-            <p className="text-sm leading-relaxed text-ink-400">
-              <span className="font-medium text-ink-200">LenderA</span> observes the
-              attestation summary ({viewA?.attestations.length ?? 0}) and pledge marker —
-              not the underlying invoice ({viewA?.invoices.length ?? 0} in ACS).
+            <p className="mt-8 text-center font-display text-base font-medium tracking-tight text-ink-200 sm:mt-10 sm:text-lg lg:text-xl">
+              Same invoice. Same ledger. Lender B cannot see it.
             </p>
-          </div>
-          <div className="card flex items-start gap-3 px-5 py-4">
-            <IconEyeOff className="mt-0.5 h-4 w-4 shrink-0 text-ink-500" />
-            <p className="text-sm leading-relaxed text-ink-400">
-              <span className="font-medium text-ink-200">LenderB</span>:{' '}
-              {viewB?.invoices.length ?? 0} invoices, {viewB?.attestations.length ?? 0}{' '}
-              attestations — genuine absence from the ledger query.
-            </p>
-          </div>
-        </div>
-      ) : null}
+
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:mt-8 sm:grid-cols-2 sm:gap-px sm:border sm:border-white/10 sm:bg-white/10">
+              <div className="pane bg-bg/90 px-4 py-3 text-sm text-ink-muted sm:border-0 sm:bg-bg-pane sm:px-6 sm:py-4">
+                <span className="text-ink-200">Lender A</span> ·{' '}
+                {viewA?.attestations.length ?? 0} attestation ·{' '}
+                {viewA?.invoices.length ?? 0} invoices in ACS
+              </div>
+              <div className="pane bg-bg/90 px-4 py-3 text-sm text-ink-muted sm:border-0 sm:bg-bg-pane sm:px-6 sm:py-4">
+                <span className="text-ink-200">Lender B</span> · {invoiceCountB}{' '}
+                invoices · {attestationCountB} attestations
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

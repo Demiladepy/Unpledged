@@ -88,3 +88,20 @@ export function IconLock({ className, ...props }: IconProps) {
     </svg>
   )
 }
+
+export function IconCopy({ className, ...props }: IconProps) {
+  return (
+    <svg className={className} {...base} {...props}>
+      <path strokeLinecap="square" d="M8 8h10v12H8V8Z" />
+      <path strokeLinecap="square" d="M6 16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h10" />
+    </svg>
+  )
+}
+
+export function IconMenu({ className, ...props }: IconProps) {
+  return (
+    <svg className={className} {...base} {...props}>
+      <path strokeLinecap="square" d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  )
+}

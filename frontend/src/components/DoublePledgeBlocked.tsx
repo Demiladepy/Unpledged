@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getDoublePledgeAttempt } from '../ledger/api'
 import type { DoublePledgeAttempt } from '../types/ledger'
-import { IconLock, IconX } from './icons'
+import { CopyableId } from './CopyableId'
 import { PageHeader } from './PageHeader'
 
 export function DoublePledgeBlocked() {
@@ -32,61 +32,50 @@ export function DoublePledgeBlocked() {
       />
 
       {loading || !attempt ? (
-        <p className="text-sm text-ink-500">Loading…</p>
+        <p className="text-sm text-ink-muted">Loading…</p>
       ) : (
-        <div className="card overflow-hidden border-negative/25">
-          <div className="flex items-center gap-4 border-b border-negative/20 bg-negative/10 px-5 py-5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-negative/15 ring-1 ring-negative/25">
-              <IconX className="h-5 w-5 text-negative" />
-            </div>
-            <div>
-              <p className="label-muted text-negative">Transaction rejected</p>
-              <p className="text-lg font-semibold text-ink-100">
-                Pledge blocked — duplicate pledge
-              </p>
-            </div>
+        <div className="pane">
+          <div className="border-b border-white/10 px-6 py-5">
+            <p className="font-display text-sm font-semibold uppercase tracking-[0.1em] text-lime">
+              Fraud prevented on-chain
+            </p>
+            <p className="mt-2 text-sm text-ink-muted">
+              PledgeRegistry rejected duplicate pledge on canonical invoice ref
+            </p>
           </div>
 
-          <dl className="grid gap-5 px-5 py-5 sm:grid-cols-2">
-            <div>
-              <dt className="label-muted">Invoice</dt>
-              <dd className="mt-1 font-mono text-sm text-ink-100">{attempt.invoiceNumber}</dd>
+          <dl className="grid gap-0 px-6 sm:grid-cols-2">
+            <div className="data-row sm:col-span-1">
+              <dt className="data-label">Invoice</dt>
+              <dd className="font-mono text-sm text-ink-100">{attempt.invoiceNumber}</dd>
             </div>
-            <div>
-              <dt className="label-muted">Attempting lender</dt>
-              <dd className="mt-1 font-mono text-xs text-ink-200">{attempt.lender}</dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="label-muted">Canonical ref</dt>
-              <dd className="mt-1 break-all font-mono text-xs leading-relaxed text-ink-400">
-                {attempt.invoiceRef}
+            <div className="data-row sm:col-span-1">
+              <dt className="data-label">Status</dt>
+              <dd className="font-mono text-sm text-negative">
+                {attempt.blocked ? 'BLOCKED' : 'ALLOWED'}
               </dd>
             </div>
-            <div className="sm:col-span-2">
-              <dt className="label-muted">Reason</dt>
-              <dd className="mt-1 text-sm text-ink-200">{attempt.reason}</dd>
+            <div className="border-b border-white/[0.06] py-5 sm:col-span-2">
+              <CopyableId value={attempt.lender} label="Attempting lender" />
             </div>
-            <div>
-              <dt className="label-muted">Timestamp</dt>
-              <dd className="mt-1 font-mono text-sm text-ink-400">{attempt.attemptedAt}</dd>
+            <div className="border-b border-white/[0.06] py-5 sm:col-span-2">
+              <p className="data-label mb-2">Canonical ref</p>
+              <CopyableId value={attempt.invoiceRef || '—'} />
             </div>
-            <div>
-              <dt className="label-muted">Status</dt>
-              <dd className="mt-1 flex items-center gap-1.5 text-sm font-medium text-negative">
-                <IconLock className="h-4 w-4" />
-                {attempt.blocked ? 'Blocked' : 'Allowed'}
-              </dd>
+            <div className="data-row sm:col-span-1">
+              <dt className="data-label">Timestamp</dt>
+              <dd className="font-mono text-xs text-ink-muted">{attempt.attemptedAt}</dd>
             </div>
           </dl>
 
-          <p className="border-t border-white/6 px-5 py-4 text-sm leading-relaxed text-ink-500">
-            PledgeRegistry rejected a second pledge on the same canonical ref; the on-ledger
-            assertion was{' '}
-            <code className="rounded bg-surface-800 px-1.5 py-0.5 font-mono text-xs text-ink-300">
-              Invoice already pledged
-            </code>
-            .
-          </p>
+          <div className="border-t border-white/10 px-6 py-5">
+            <p className="data-label mb-1">On-chain rejection (expected)</p>
+            <p className="mb-3 text-xs text-ink-dim">
+              Recorded when a second pledge was attempted on DevNet — the ledger
+              correctly refused it. This is the demo proof, not an app error.
+            </p>
+            <pre className="terminal-block text-negative">{attempt.reason}</pre>
+          </div>
         </div>
       )}
     </div>
