@@ -5,7 +5,9 @@ import type {
   FinancingOffer,
   FinancingRequest,
   Invoice,
+  LenderTransactionTreeSummary,
   LenderView,
+  LiveDoublePledgeResult,
   Party,
   PledgeMarker,
   UnpledgedAttestation,
@@ -114,4 +116,49 @@ export async function mockListPledgeMarkers(
 ): Promise<PledgeMarker[]> {
   await delay()
   return pledgeMarkersForParty(party)
+}
+
+export async function mockAttemptDoublePledgeLive(): Promise<LiveDoublePledgeResult> {
+  await delay(400)
+  return {
+    blocked: true,
+    httpStatus: 400,
+    reason: MOCK_DOUBLE_PLEDGE.reason,
+    attemptedAt: new Date().toISOString(),
+  }
+}
+
+export async function mockGetLenderFinancingTree(): Promise<LenderTransactionTreeSummary> {
+  await delay()
+  return {
+    updateId: 'mock-update-id',
+    party: PARTIES.LENDER_A,
+    nodes: [],
+    invoiceNodeCount: 0,
+    lenderVisibleNodes: [
+      {
+        nodeId: '1',
+        kind: 'Exercised',
+        templateLabel: 'Financing:FinancingOffer',
+        choice: 'AcceptFinancing',
+        lenderVisible: true,
+        isInvoiceTemplate: false,
+      },
+      {
+        nodeId: '2',
+        kind: 'Exercised',
+        templateLabel: 'Financing:PledgeRegistry',
+        choice: 'RecordPledge',
+        lenderVisible: true,
+        isInvoiceTemplate: false,
+      },
+      {
+        nodeId: '3',
+        kind: 'Created',
+        templateLabel: 'Financing:PledgeMarker',
+        lenderVisible: true,
+        isInvoiceTemplate: false,
+      },
+    ],
+  }
 }

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "canton-dev": {
+      "command": "node",
+      "args": [
+        "node_modules/@canton-network-devs/canton-mcp-server/index.js"
+      ]
+    }
+  }
+}

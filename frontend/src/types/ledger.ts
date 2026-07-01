@@ -62,6 +62,30 @@ export interface DoublePledgeAttempt {
   attemptedAt: string
 }
 
+export interface LiveDoublePledgeResult {
+  blocked: boolean
+  httpStatus?: number
+  reason: string
+  attemptedAt: string
+}
+
+export interface TransactionTreeNode {
+  nodeId: string
+  kind: 'Created' | 'Exercised'
+  templateLabel: string
+  choice?: string
+  lenderVisible: boolean
+  isInvoiceTemplate: boolean
+}
+
+export interface LenderTransactionTreeSummary {
+  updateId: string
+  party: Party
+  nodes: TransactionTreeNode[]
+  invoiceNodeCount: number
+  lenderVisibleNodes: TransactionTreeNode[]
+}
+
 export interface CreateFinancingOfferInput {
   lender: Party
   sme: Party

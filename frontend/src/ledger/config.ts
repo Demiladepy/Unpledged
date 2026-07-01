@@ -18,4 +18,8 @@ export const ledgerConfig = {
     import.meta.env.VITE_CANTON_LEDGER_WS_URL ??
     'wss://ledger-api.validator.devnet.sandbox.fivenorth.io',
   userId: import.meta.env.VITE_CANTON_USER_ID ?? '6',
+  /** CompleteFinancing update for transaction-tree privacy demo */
+  completeFinancingUpdateId:
+    import.meta.env.VITE_COMPLETE_FINANCING_UPDATE_ID ??
+    '1220fe6c57bd55c9ba1af597df2369c5de82243fabc0ae67dc6f11f7aa5a73d55399',
 } as const

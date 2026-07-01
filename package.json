@@ -1,0 +1,12 @@
+{
+  "name": "unpledged",
+  "private": true,
+  "description": "Confidential receivables financing on Canton DevNet",
+  "scripts": {
+    "mcp:start": "node node_modules/@canton-network-devs/canton-mcp-server/index.js",
+    "mcp:verify": "node scripts/verify-mcp.mjs"
+  },
+  "devDependencies": {
+    "@canton-network-devs/canton-mcp-server": "2.2.1"
+  }
+}

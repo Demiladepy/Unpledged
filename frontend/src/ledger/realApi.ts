@@ -5,12 +5,16 @@ import type {
   FinancingOffer,
   FinancingRequest,
   Invoice,
+  LenderTransactionTreeSummary,
   LenderView,
+  LiveDoublePledgeResult,
   Party,
   PledgeMarker,
+  TransactionTreeNode,
   UnpledgedAttestation,
 } from '../types/ledger'
 import { ledgerClient, newCommandId } from './client'
+import { getAccessToken } from './auth'
 import { ledgerConfig } from './config'
 import { PARTIES } from './parties'
 import type {
@@ -217,23 +221,113 @@ async function submitAndWait(
   actAs: Party[],
   commands: Command[],
 ): Promise<SubmitAndWaitResponse> {
-  const { data, error } = await ledgerClient.POST(
-    '/v2/commands/submit-and-wait',
-    {
-      body: {
-        commandId: newCommandId('unpledged'),
-        commands,
-        actAs,
-        userId: ledgerConfig.userId,
-      },
-    },
-  )
-  if (error) {
+  const result = await submitAndWaitRaw(actAs, commands)
+  if (!result.ok) {
     throw new Error(
-      `POST /v2/commands/submit-and-wait failed: ${JSON.stringify(error)}`,
+      `POST /v2/commands/submit-and-wait failed (${result.status}): ${result.body}`,
     )
   }
-  return data ?? {}
+  try {
+    return JSON.parse(result.body) as SubmitAndWaitResponse
+  } catch {
+    return {}
+  }
+}
+
+async function submitAndWaitRaw(
+  actAs: Party[],
+  commands: Command[],
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const token = await getAccessToken()
+  const url = `${ledgerConfig.baseUrl.replace(/\/$/, '')}/v2/commands/submit-and-wait`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      commandId: newCommandId('unpledged'),
+      commands,
+      actAs,
+      userId: ledgerConfig.userId,
+    }),
+  })
+  const body = await res.text()
+  return { ok: res.ok, status: res.status, body }
+}
+
+function templateLabel(templateId: unknown): string {
+  if (typeof templateId !== 'string') return String(templateId)
+  const parts = templateId.split(':')
+  return parts.length >= 3 ? parts.slice(-2).join(':') : templateId
+}
+
+function isInvoiceTemplateId(templateId: unknown): boolean {
+  return (
+    typeof templateId === 'string' &&
+    (templateId.endsWith(':Invoice:Invoice') ||
+      templateId.includes('Invoice:Invoice'))
+  )
+}
+
+function parseTransactionTreeNodes(
+  tree: { transaction?: { eventsById?: Record<string, unknown> } },
+  party: Party,
+): TransactionTreeNode[] {
+  const events = tree.transaction?.eventsById ?? {}
+  const out: TransactionTreeNode[] = []
+
+  for (const [nodeId, raw] of Object.entries(events)) {
+    const event = raw as Record<string, unknown>
+    if ('CreatedTreeEvent' in event) {
+      const value = (event.CreatedTreeEvent as { value?: Record<string, unknown> })
+        .value
+      const witnesses = (value?.witnessParties as string[] | undefined) ?? []
+      const templateId = value?.templateId
+      out.push({
+        nodeId,
+        kind: 'Created',
+        templateLabel: templateLabel(templateId),
+        lenderVisible: witnesses.includes(party),
+        isInvoiceTemplate: isInvoiceTemplateId(templateId),
+      })
+    } else if ('ExercisedTreeEvent' in event) {
+      const value = (event.ExercisedTreeEvent as { value?: Record<string, unknown> })
+        .value
+      const witnesses = (value?.witnessParties as string[] | undefined) ?? []
+      const templateId = value?.templateId
+      out.push({
+        nodeId,
+        kind: 'Exercised',
+        templateLabel: templateLabel(templateId),
+        choice: value?.choice as string | undefined,
+        lenderVisible: witnesses.includes(party),
+        isInvoiceTemplate: isInvoiceTemplateId(templateId),
+      })
+    }
+  }
+
+  return out
+}
+
+function extractFailureReason(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as {
+      code?: string
+      cause?: string
+      message?: string
+    }
+    return (
+      parsed.cause ??
+      parsed.message ??
+      parsed.code ??
+      body
+    )
+  } catch {
+    return body
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -443,4 +537,124 @@ export async function realListPledgeMarkers(
   return events
     .map(parsePledgeMarker)
     .filter((m) => m.lender === party || m.invoiceOwner === party)
+}
+
+/** Re-submit second pledge on INV-001 — expect ledger rejection (demo). */
+export async function realAttemptDoublePledgeLive(): Promise<LiveDoublePledgeResult> {
+  const sme = PARTIES.SME
+  const lender = PARTIES.LENDER_A
+
+  const [invoices, attestations, coordinators, registries] = await Promise.all([
+    queryActiveContracts(sme, TEMPLATE_QUERY_IDS.Invoice),
+    queryActiveContracts(sme, TEMPLATE_QUERY_IDS.UnpledgedAttestation),
+    queryActiveContracts(sme, TEMPLATE_QUERY_IDS.FinancingCoordinator),
+    queryActiveContracts(sme, TEMPLATE_QUERY_IDS.PledgeRegistry),
+  ])
+
+  const invoice = invoices
+    .map(parseInvoice)
+    .find((inv) => inv.invoiceNumber === 'INV-001')
+  const attestation = attestations
+    .map(parseAttestation)
+    .filter((a) => a.lender === lender)
+    .at(-1)
+  const coordinator = coordinators.at(-1)
+  const registry = registries.at(-1)
+
+  if (!invoice || !attestation || !coordinator || !registry) {
+    throw new Error(
+      'Missing INV-001, attestation, coordinator, or registry — run create:financing first',
+    )
+  }
+
+  await submitAndWait([lender], [
+    {
+      CreateCommand: {
+        templateId: TEMPLATE_IDS.FinancingOffer,
+        createArguments: {
+          lender,
+          sme,
+          attestationCid: attestation.contractId,
+          advanceAmount: '500.00',
+        },
+      },
+    },
+  ])
+
+  const offers = await queryActiveContracts(
+    lender,
+    TEMPLATE_QUERY_IDS.FinancingOffer,
+  )
+  const offer = offers.at(-1)
+  if (!offer) {
+    throw new Error('Second FinancingOffer not found after create')
+  }
+
+  const dup = await submitAndWaitRaw([sme], [
+    {
+      ExerciseCommand: {
+        templateId: TEMPLATE_IDS.FinancingCoordinator,
+        contractId: coordinator.contractId,
+        choice: CHOICE_NAMES.CompleteFinancing,
+        choiceArgument: {
+          invoiceCid: invoice.contractId,
+          offerCid: offer.contractId,
+          pledgeRegistryCid: registry.contractId,
+        },
+      },
+    },
+  ])
+
+  const attemptedAt = new Date().toISOString()
+  if (dup.ok) {
+    return {
+      blocked: false,
+      httpStatus: dup.status,
+      reason: `UNEXPECTED SUCCESS (HTTP ${dup.status}): ${dup.body}`,
+      attemptedAt,
+    }
+  }
+
+  return {
+    blocked: true,
+    httpStatus: dup.status,
+    reason: extractFailureReason(dup.body),
+    attemptedAt,
+  }
+}
+
+export async function realGetLenderFinancingTree(
+  updateId: string = ledgerConfig.completeFinancingUpdateId,
+  party: Party = PARTIES.LENDER_A,
+): Promise<LenderTransactionTreeSummary> {
+  const token = await getAccessToken()
+  const params = new URLSearchParams()
+  params.append('parties', party)
+  const url = `${ledgerConfig.baseUrl.replace(/\/$/, '')}/v2/updates/transaction-tree-by-id/${encodeURIComponent(updateId)}?${params}`
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    throw new Error(`transaction-tree-by-id failed (${res.status}): ${text.slice(0, 400)}`)
+  }
+
+  const tree = JSON.parse(text) as {
+    transaction?: { eventsById?: Record<string, unknown> }
+  }
+  const nodes = parseTransactionTreeNodes(tree, party)
+  const lenderVisibleNodes = nodes.filter((n) => n.lenderVisible)
+  const invoiceNodeCount = lenderVisibleNodes.filter((n) => n.isInvoiceTemplate).length
+
+  return {
+    updateId,
+    party,
+    nodes,
+    invoiceNodeCount,
+    lenderVisibleNodes,
+  }
 }
