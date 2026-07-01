@@ -13,7 +13,11 @@
     "create:invoice": "tsx server/firstCreate.ts",
     "grant:act-as": "tsx server/grantActAs.ts",
     "create:attestation": "tsx server/createAttestation.ts",
-    "create:financing": "tsx server/createFinancing.ts"
+    "create:financing": "tsx server/createFinancing.ts",
+    "verify:live-ui": "tsx server/verifyLiveUi.ts",
+    "verify:browser-ui": "tsx server/verifyBrowserUi.ts",
+    "verify:tree": "tsx server/verifyTransactionTree.ts",
+    "verify:all": "tsx server/verifyLiveUi.ts && tsx server/verifyTransactionTree.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

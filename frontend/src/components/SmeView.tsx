@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react'
-import { listFinancingRequests, listInvoices } from '../ledger/api'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  listFinancingRequests,
+  listInvoices,
+  requestFinancing,
+} from '../ledger/api'
 import { PARTIES, partyDisplayName } from '../ledger/parties'
 import type { FinancingRequest, Invoice } from '../types/ledger'
 import { CopyableId } from './CopyableId'
@@ -18,37 +22,61 @@ export function SmeView() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [requests, setRequests] = useState<FinancingRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [actingOn, setActingOn] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  const reload = useCallback(async () => {
+    const [inv, req] = await Promise.all([
+      listInvoices(PARTIES.SME),
+      listFinancingRequests(PARTIES.SME),
+    ])
+    setInvoices(inv)
+    setRequests(req)
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const [inv, req] = await Promise.all([
-        listInvoices(PARTIES.SME),
-        listFinancingRequests(PARTIES.SME),
-      ])
-      if (!cancelled) {
-        setInvoices(inv)
-        setRequests(req)
-        setLoading(false)
-      }
+    void reload()
+  }, [reload])
+
+  async function handleRequestFinancing(invoice: Invoice) {
+    setActingOn(invoice.contractId)
+    setError(null)
+    setSuccess(null)
+    try {
+      const offer = await requestFinancing(invoice)
+      setSuccess(
+        `FinancingOffer created for ${invoice.invoiceNumber} — advance ${formatCurrency(offer.advanceAmount)}. Lender A can fund on /lender.`,
+      )
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setActingOn(null)
     }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  }
 
   return (
     <div>
       <PageHeader
         eyebrow="Party view"
         title={`SME — ${partyDisplayName(PARTIES.SME)}`}
-        lead="Receivables portfolio. Financing routes through attestation — lenders never see raw invoice fields unless stakeholder."
+        lead="Receivables portfolio. Request financing creates a Lender A FinancingOffer on Canton — lenders never see raw invoice fields unless stakeholder."
       />
 
       <div className="mb-6">
         <CopyableId value={PARTIES.SME} label="Party ID" />
       </div>
+
+      {error ? (
+        <pre className="terminal-block mb-4 text-negative">{error}</pre>
+      ) : null}
+      {success ? (
+        <p className="mb-4 border border-lime/25 bg-lime/[0.04] px-4 py-3 text-sm text-lime">
+          {success}
+        </p>
+      ) : null}
 
       {loading ? (
         <p className="text-sm text-ink-muted">Loading…</p>
@@ -58,6 +86,7 @@ export function SmeView() {
             {invoices.map((inv) => {
               const req = requests.find((r) => r.invoiceNumber === inv.invoiceNumber)
               const funded = req?.status === 'funded'
+              const busy = actingOn === inv.contractId
               return (
                 <article key={inv.contractId} className="pane p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -96,11 +125,12 @@ export function SmeView() {
                   </dl>
                   <button
                     type="button"
-                    disabled={funded}
+                    disabled={funded || busy}
+                    onClick={() => void handleRequestFinancing(inv)}
                     className="btn-lime mt-4 w-full justify-center"
                   >
-                    Request financing
-                    {!funded && <IconArrowRight className="h-3.5 w-3.5" />}
+                    {busy ? 'Submitting…' : 'Request financing'}
+                    {!funded && !busy && <IconArrowRight className="h-3.5 w-3.5" />}
                   </button>
                 </article>
               )
@@ -119,6 +149,7 @@ export function SmeView() {
             {invoices.map((inv) => {
               const req = requests.find((r) => r.invoiceNumber === inv.invoiceNumber)
               const funded = req?.status === 'funded'
+              const busy = actingOn === inv.contractId
               return (
                 <div
                   key={inv.contractId}
@@ -140,9 +171,14 @@ export function SmeView() {
                   >
                     {funded ? 'Financed' : 'Outstanding'}
                   </span>
-                  <button type="button" disabled={funded} className="btn-lime">
-                    Request financing
-                    {!funded && <IconArrowRight className="h-3.5 w-3.5" />}
+                  <button
+                    type="button"
+                    disabled={funded || busy}
+                    onClick={() => void handleRequestFinancing(inv)}
+                    className="btn-lime"
+                  >
+                    {busy ? '…' : 'Request financing'}
+                    {!funded && !busy && <IconArrowRight className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               )

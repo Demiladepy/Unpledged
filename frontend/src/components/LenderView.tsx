@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { getAttestation, getLenderView } from '../ledger/api'
+import { useCallback, useEffect, useState } from 'react'
+import { fundFinancingOffer, getAttestation, getLenderView } from '../ledger/api'
 import { PARTIES, partyDisplayName } from '../ledger/parties'
-import type { LenderView, UnpledgedAttestation } from '../types/ledger'
+import type { FinancingOffer, LenderView, UnpledgedAttestation } from '../types/ledger'
 import { CopyableId } from './CopyableId'
 import { PageHeader } from './PageHeader'
 
@@ -17,35 +17,59 @@ export function LenderViewPage() {
   const [view, setView] = useState<LenderView | null>(null)
   const [attestation, setAttestation] = useState<UnpledgedAttestation | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fundingCid, setFundingCid] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  const reload = useCallback(async () => {
+    const lenderView = await getLenderView(PARTIES.LENDER_A)
+    const att = await getAttestation(PARTIES.LENDER_A)
+    setView(lenderView)
+    setAttestation(att)
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const lenderView = await getLenderView(PARTIES.LENDER_A)
-      const att = await getAttestation(PARTIES.LENDER_A)
-      if (!cancelled) {
-        setView(lenderView)
-        setAttestation(att)
-        setLoading(false)
-      }
+    void reload()
+  }, [reload])
+
+  async function handleFund(offer: FinancingOffer) {
+    setFundingCid(offer.contractId)
+    setError(null)
+    setSuccess(null)
+    try {
+      const marker = await fundFinancingOffer(offer.contractId)
+      setSuccess(
+        `CompleteFinancing committed — PledgeMarker ${marker.contractId.slice(0, 16)}…`,
+      )
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setFundingCid(null)
     }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  }
 
   return (
     <div>
       <PageHeader
         eyebrow="Party view"
         title={`Lender — ${partyDisplayName(PARTIES.LENDER_A)}`}
-        lead="Financing decisions based on attestation summary only. No invoice line items, amounts per invoice, or debtor fields are disclosed."
+        lead="Fund executes SME CompleteFinancing on ledger — attestation summary only, no invoice line items disclosed to this party."
       />
 
       <div className="mb-8">
         <CopyableId value={PARTIES.LENDER_A} label="Party ID" />
       </div>
+
+      {error ? (
+        <pre className="terminal-block mb-4 text-negative">{error}</pre>
+      ) : null}
+      {success ? (
+        <p className="mb-4 border border-lime/25 bg-lime/[0.04] px-4 py-3 text-sm text-lime">
+          {success}
+        </p>
+      ) : null}
 
       {loading || !view ? (
         <p className="text-sm text-ink-muted">Loading…</p>
@@ -58,25 +82,37 @@ export function LenderViewPage() {
               </h3>
             </div>
             {view.pendingOffers.length === 0 ? (
-              <p className="px-6 py-10 text-sm text-ink-muted">No pending financing offers.</p>
+              <p className="px-6 py-10 text-sm text-ink-muted">
+                No pending financing offers. SME can request on{' '}
+                <a href="/sme" className="text-lime underline decoration-lime/30">
+                  /sme
+                </a>
+                .
+              </p>
             ) : (
-              view.pendingOffers.map((offer) => (
-                <div
-                  key={offer.contractId}
-                  className="border-b border-white/[0.06] px-6 py-5 last:border-b-0"
-                >
-                  <CopyableId value={offer.contractId} label="Offer CID" />
-                  <p className="mt-4 text-xs text-ink-muted">
-                    Advance
-                  </p>
-                  <p className="font-mono text-lg text-lime">
-                    {formatCurrency(offer.advanceAmount)}
-                  </p>
-                  <button type="button" className="btn-lime mt-5">
-                    Fund
-                  </button>
-                </div>
-              ))
+              view.pendingOffers.map((offer) => {
+                const busy = fundingCid === offer.contractId
+                return (
+                  <div
+                    key={offer.contractId}
+                    className="border-b border-white/[0.06] px-6 py-5 last:border-b-0"
+                  >
+                    <CopyableId value={offer.contractId} label="Offer CID" />
+                    <p className="mt-4 text-xs text-ink-muted">Advance</p>
+                    <p className="font-mono text-lg text-lime">
+                      {formatCurrency(offer.advanceAmount)}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handleFund(offer)}
+                      className="btn-lime mt-5"
+                    >
+                      {busy ? 'Committing…' : 'Fund'}
+                    </button>
+                  </div>
+                )
+              })
             )}
           </section>
 

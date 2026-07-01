@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { smokeTestLedgerEnd } from '../ledger/auth'
 import { ledgerConfig } from '../ledger/config'
+import { partiesConfigured } from '../ledger/parties'
 import { LiveBadge } from './LiveBadge'
 import { PageHeader } from './PageHeader'
 
@@ -57,6 +58,12 @@ export function SmokeTestPage() {
         <div>
           <dt className="data-label">Token proxy</dt>
           <dd className="mt-2 font-mono text-xs text-ink-200">POST /api/token</dd>
+        </div>
+        <div>
+          <dt className="data-label">Parties configured</dt>
+          <dd className="mt-2 font-mono text-xs text-ink-200">
+            {partiesConfigured() ? 'yes (VITE_PARTY_*)' : 'no — run npm run allocate:parties'}
+          </dd>
         </div>
       </dl>
 

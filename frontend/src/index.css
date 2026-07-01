@@ -129,17 +129,17 @@ body {
   .home-hero-bg {
     position: absolute;
     inset: -10% -5% -5% 0;
-    background-size: cover;
-    background-position: 75% center;
-    background-repeat: no-repeat;
-    opacity: 0.4;
+    background:
+      radial-gradient(ellipse 80% 60% at 85% 40%, color-mix(in srgb, var(--color-lime) 12%, transparent), transparent 70%),
+      radial-gradient(ellipse 50% 40% at 20% 80%, color-mix(in srgb, white 4%, transparent), transparent 60%),
+      linear-gradient(135deg, #0f0f0c 0%, #0a0a0a 50%, #080808 100%);
+    opacity: 1;
     pointer-events: none;
   }
 
   @media (max-width: 639px) {
     .home-hero-bg {
-      background-position: center bottom;
-      opacity: 0.22;
+      opacity: 0.85;
     }
   }
 
@@ -283,6 +283,18 @@ body {
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--color-lime);
+  }
+
+  .inspector-stamp-mock {
+    border: 1px solid color-mix(in srgb, white 15%, transparent);
+    background-color: color-mix(in srgb, white 4%, transparent);
+    padding: 0.35rem 0.65rem;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
   }
 
   .inspector-node-list {

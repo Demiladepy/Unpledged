@@ -26,6 +26,9 @@ import {
 
 const delay = (ms = 120) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const liveMockOffers = [...MOCK_FINANCING_OFFERS]
+const liveMockMarkers = [...MOCK_PLEDGE_MARKERS]
+
 function invoicesVisibleToParty(party: Party): Invoice[] {
   if (party === PARTIES.SME || party === PARTIES.DEBTOR) {
     return MOCK_INVOICES
@@ -41,15 +44,13 @@ function attestationsForParty(party: Party): UnpledgedAttestation[] {
 }
 
 function pledgeMarkersForParty(party: Party): PledgeMarker[] {
-  return MOCK_PLEDGE_MARKERS.filter(
+  return liveMockMarkers.filter(
     (m) => m.lender === party || m.invoiceOwner === party,
   )
 }
 
 function offersForParty(party: Party): FinancingOffer[] {
-  return MOCK_FINANCING_OFFERS.filter(
-    (o) => o.lender === party || o.sme === party,
-  )
+  return liveMockOffers.filter((o) => o.lender === party || o.sme === party)
 }
 
 export async function mockListInvoices(party: Party): Promise<Invoice[]> {
@@ -73,18 +74,25 @@ export async function mockCreateFinancingOffer(
   input: CreateFinancingOfferInput,
 ): Promise<FinancingOffer> {
   await delay()
-  return {
-    contractId: `#3:${MOCK_FINANCING_OFFERS.length}`,
+  const offer: FinancingOffer = {
+    contractId: `#3:${liveMockOffers.length}`,
     ...input,
     status: 'pending',
   }
+  liveMockOffers.push(offer)
+  return offer
 }
 
 export async function mockAcceptFinancing(
-  _input: AcceptFinancingInput,
+  input: AcceptFinancingInput,
 ): Promise<PledgeMarker> {
   await delay()
-  return MOCK_PLEDGE_MARKERS[0]
+  const offer = liveMockOffers.find((o) => o.contractId === input.offerCid)
+  if (offer) {
+    offer.status = 'accepted'
+  }
+  const marker = liveMockMarkers[0] ?? MOCK_PLEDGE_MARKERS[0]
+  return marker
 }
 
 export async function mockGetLenderView(party: Party): Promise<LenderView> {

@@ -409,7 +409,7 @@ export async function realCreateFinancingOffer(
           lender: input.lender,
           sme: input.sme,
           attestationCid: input.attestationCid,
-          advanceAmount: String(input.advanceAmount),
+          advanceAmount: Number(input.advanceAmount).toFixed(2),
         },
       },
     },

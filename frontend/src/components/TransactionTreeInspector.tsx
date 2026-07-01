@@ -80,7 +80,13 @@ export function TransactionTreeInspector({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <span className="inspector-stamp">Verified against DevNet</span>
+          <span
+            className={
+              ledgerConfig.useMocks ? 'inspector-stamp-mock' : 'inspector-stamp'
+            }
+          >
+            {ledgerConfig.useMocks ? 'Mock projection' : 'Verified against DevNet'}
+          </span>
           <button
             type="button"
             disabled={loading || refreshing}

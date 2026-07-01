@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
 
-import homeBg from '../assets/home-bg.png'
 import { getLenderView, listPledgeMarkers } from '../ledger/api'
 import { PARTIES } from '../ledger/parties'
 import type { UnpledgedAttestation } from '../types/ledger'
@@ -158,11 +157,7 @@ export function SplitScreenComparison() {
 
   return (
     <div className="home-hero -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-      <div
-        className="home-hero-bg"
-        style={{ backgroundImage: `url(${homeBg})` }}
-        aria-hidden
-      />
+      <div className="home-hero-bg" aria-hidden />
       <div className="home-hero-fade" aria-hidden />
 
       <div className="relative z-10">

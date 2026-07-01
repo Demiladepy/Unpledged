@@ -15,6 +15,7 @@ import type {
 } from '../types/ledger'
 import { ledgerConfig } from './config'
 import * as mock from './mockApi'
+import { PARTIES } from './parties'
 import * as real from './realApi'
 
 export async function listInvoices(party: Party): Promise<Invoice[]> {
@@ -90,4 +91,32 @@ export async function getLenderFinancingTree(): Promise<LenderTransactionTreeSum
   return ledgerConfig.useMocks
     ? mock.mockGetLenderFinancingTree()
     : real.realGetLenderFinancingTree()
+}
+
+/** SME initiates financing — Lender A creates a FinancingOffer on ledger. */
+export async function requestFinancing(invoice: Invoice): Promise<FinancingOffer> {
+  const attestation = await getAttestation(PARTIES.LENDER_A)
+  if (!attestation) {
+    throw new Error('No unpledged attestation for Lender A — run create:attestation first')
+  }
+  return createFinancingOffer({
+    lender: PARTIES.LENDER_A,
+    sme: PARTIES.SME,
+    attestationCid: attestation.contractId,
+    advanceAmount: Number((invoice.amount * 0.9).toFixed(2)),
+  })
+}
+
+/** Lender funds a pending offer — SME CompleteFinancing on first unfunded invoice. */
+export async function fundFinancingOffer(offerCid: string): Promise<PledgeMarker> {
+  const pending = (await listFinancingRequests(PARTIES.SME)).filter(
+    (r) => r.status === 'pending',
+  )
+  if (pending.length === 0) {
+    throw new Error('No unfunded invoice available for this offer')
+  }
+  return acceptFinancing({
+    offerCid,
+    invoiceNumber: pending[0].invoiceNumber,
+  })
 }
