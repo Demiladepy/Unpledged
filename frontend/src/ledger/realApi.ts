@@ -7,6 +7,8 @@ import type {
   Invoice,
   LenderTransactionTreeSummary,
   LenderView,
+  LiveDoublePledgeLogLine,
+  LiveDoublePledgeProgress,
   LiveDoublePledgeResult,
   Party,
   PledgeMarker,
@@ -237,8 +239,15 @@ async function submitAndWait(
 async function submitAndWaitRaw(
   actAs: Party[],
   commands: Command[],
-): Promise<{ ok: boolean; status: number; body: string }> {
+  commandId?: string,
+): Promise<{
+  ok: boolean
+  status: number
+  body: string
+  commandId: string
+}> {
   const token = await getAccessToken()
+  const id = commandId ?? newCommandId('unpledged')
   const url = `${ledgerConfig.baseUrl.replace(/\/$/, '')}/v2/commands/submit-and-wait`
   const res = await fetch(url, {
     method: 'POST',
@@ -248,14 +257,49 @@ async function submitAndWaitRaw(
       Accept: 'application/json',
     },
     body: JSON.stringify({
-      commandId: newCommandId('unpledged'),
+      commandId: id,
       commands,
       actAs,
       userId: ledgerConfig.userId,
     }),
   })
   const body = await res.text()
-  return { ok: res.ok, status: res.status, body }
+  return { ok: res.ok, status: res.status, body, commandId: id }
+}
+
+function formatVerbatimBody(body: string): string {
+  try {
+    return JSON.stringify(JSON.parse(body) as unknown, null, 2)
+  } catch {
+    return body
+  }
+}
+
+function parseLedgerErrorIds(body: string): {
+  correlationId?: string
+  traceId?: string
+  reason: string
+} {
+  try {
+    const parsed = JSON.parse(body) as {
+      code?: string
+      cause?: string
+      message?: string
+      correlationId?: string
+      traceId?: string
+    }
+    return {
+      correlationId: parsed.correlationId,
+      traceId: parsed.traceId,
+      reason:
+        parsed.cause ??
+        parsed.message ??
+        parsed.code ??
+        body,
+    }
+  } catch {
+    return { reason: body }
+  }
 }
 
 function templateLabel(templateId: unknown): string {
@@ -312,22 +356,16 @@ function parseTransactionTreeNodes(
   return out
 }
 
-function extractFailureReason(body: string): string {
-  try {
-    const parsed = JSON.parse(body) as {
-      code?: string
-      cause?: string
-      message?: string
-    }
-    return (
-      parsed.cause ??
-      parsed.message ??
-      parsed.code ??
-      body
-    )
-  } catch {
-    return body
-  }
+function logProgress(
+  onProgress: LiveDoublePledgeProgress | undefined,
+  text: string,
+  variant: LiveDoublePledgeLogLine['variant'] = 'info',
+): void {
+  onProgress?.({
+    timestamp: new Date().toISOString(),
+    text,
+    variant,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -539,11 +577,29 @@ export async function realListPledgeMarkers(
     .filter((m) => m.lender === party || m.invoiceOwner === party)
 }
 
-/** Re-submit second pledge on INV-001 — expect ledger rejection (demo). */
-export async function realAttemptDoublePledgeLive(): Promise<LiveDoublePledgeResult> {
+/** Re-submit second pledge on INV-001 — mirrors server/createFinancing.ts Part B. */
+export async function realAttemptDoublePledgeLive(
+  onProgress?: LiveDoublePledgeProgress,
+): Promise<LiveDoublePledgeResult> {
   const sme = PARTIES.SME
   const lender = PARTIES.LENDER_A
+  const attemptedAt = new Date().toISOString()
 
+  logProgress(onProgress, 'PART B — double-pledge replay (live DevNet)', 'lime')
+  logProgress(onProgress, `actAs: SME · userId: ${ledgerConfig.userId}`, 'muted')
+
+  const markersBefore = await queryActiveContracts(
+    lender,
+    TEMPLATE_QUERY_IDS.PledgeMarker,
+  )
+  const pledgeMarkerCountBefore = markersBefore.length
+  logProgress(
+    onProgress,
+    `PledgeMarker count (Lender A ACS): ${pledgeMarkerCountBefore}`,
+    'info',
+  )
+
+  logProgress(onProgress, 'B0: discover INV-001, attestation, coordinator, registry…')
   const [invoices, attestations, coordinators, registries] = await Promise.all([
     queryActiveContracts(sme, TEMPLATE_QUERY_IDS.Invoice),
     queryActiveContracts(sme, TEMPLATE_QUERY_IDS.UnpledgedAttestation),
@@ -559,15 +615,19 @@ export async function realAttemptDoublePledgeLive(): Promise<LiveDoublePledgeRes
     .filter((a) => a.lender === lender)
     .at(-1)
   const coordinator = coordinators.at(-1)
-  const registry = registries.at(-1)
+  let registryCid = registries.at(-1)?.contractId
 
-  if (!invoice || !attestation || !coordinator || !registry) {
+  if (!invoice || !attestation || !coordinator || !registryCid) {
     throw new Error(
       'Missing INV-001, attestation, coordinator, or registry — run create:financing first',
     )
   }
 
-  await submitAndWait([lender], [
+  logProgress(onProgress, `  Invoice INV-001: ${invoice.contractId}`, 'muted')
+  logProgress(onProgress, `  Coordinator:     ${coordinator.contractId}`, 'muted')
+
+  logProgress(onProgress, 'B1: LenderA creates second FinancingOffer (advance 500.00)…')
+  const offerCreate = await submitAndWaitRaw([lender], [
     {
       CreateCommand: {
         templateId: TEMPLATE_IDS.FinancingOffer,
@@ -580,46 +640,106 @@ export async function realAttemptDoublePledgeLive(): Promise<LiveDoublePledgeRes
       },
     },
   ])
+  if (!offerCreate.ok) {
+    throw new Error(
+      `FinancingOffer create failed (${offerCreate.status}): ${offerCreate.body}`,
+    )
+  }
+  logProgress(onProgress, `  HTTP ${offerCreate.status} — offer created`, 'success')
 
   const offers = await queryActiveContracts(
     lender,
     TEMPLATE_QUERY_IDS.FinancingOffer,
   )
-  const offer = offers.at(-1)
-  if (!offer) {
+  const offer2 = offers.at(-1)
+  if (!offer2) {
     throw new Error('Second FinancingOffer not found after create')
   }
+  logProgress(onProgress, `  Second offer: ${offer2.contractId}`, 'muted')
 
-  const dup = await submitAndWaitRaw([sme], [
-    {
-      ExerciseCommand: {
-        templateId: TEMPLATE_IDS.FinancingCoordinator,
-        contractId: coordinator.contractId,
-        choice: CHOICE_NAMES.CompleteFinancing,
-        choiceArgument: {
-          invoiceCid: invoice.contractId,
-          offerCid: offer.contractId,
-          pledgeRegistryCid: registry.contractId,
+  const registriesRefreshed = await queryActiveContracts(
+    sme,
+    TEMPLATE_QUERY_IDS.PledgeRegistry,
+  )
+  registryCid = registriesRefreshed.at(-1)?.contractId
+  if (!registryCid) {
+    throw new Error('PledgeRegistry missing before CompleteFinancing')
+  }
+
+  logProgress(
+    onProgress,
+    'B2: SME → CompleteFinancing on SAME invoice (expect ledger rejection)…',
+  )
+  const dupCommandId = newCommandId('double-pledge')
+  logProgress(onProgress, `  commandId: ${dupCommandId}`, 'muted')
+
+  const dup = await submitAndWaitRaw(
+    [sme],
+    [
+      {
+        ExerciseCommand: {
+          templateId: TEMPLATE_IDS.FinancingCoordinator,
+          contractId: coordinator.contractId,
+          choice: CHOICE_NAMES.CompleteFinancing,
+          choiceArgument: {
+            invoiceCid: invoice.contractId,
+            offerCid: offer2.contractId,
+            pledgeRegistryCid: registryCid,
+          },
         },
       },
-    },
-  ])
+    ],
+    dupCommandId,
+  )
 
-  const attemptedAt = new Date().toISOString()
+  const verbatimBody = formatVerbatimBody(dup.body)
+  const { correlationId, traceId, reason } = parseLedgerErrorIds(dup.body)
+
+  logProgress(onProgress, `HTTP ${dup.status}`, dup.ok ? 'error' : 'error')
+  if (correlationId) {
+    logProgress(onProgress, `correlationId: ${correlationId}`, 'muted')
+  }
+  if (traceId) {
+    logProgress(onProgress, `traceId: ${traceId}`, 'muted')
+  }
+
+  const markersAfter = await queryActiveContracts(
+    lender,
+    TEMPLATE_QUERY_IDS.PledgeMarker,
+  )
+  const pledgeMarkerCountAfter = markersAfter.length
+  logProgress(
+    onProgress,
+    `PledgeMarker count after rejection: ${pledgeMarkerCountAfter} (expected ${pledgeMarkerCountBefore})`,
+    pledgeMarkerCountAfter === pledgeMarkerCountBefore ? 'lime' : 'error',
+  )
+
   if (dup.ok) {
     return {
       blocked: false,
       httpStatus: dup.status,
-      reason: `UNEXPECTED SUCCESS (HTTP ${dup.status}): ${dup.body}`,
+      reason: `UNEXPECTED SUCCESS (HTTP ${dup.status})`,
+      verbatimBody,
+      correlationId,
+      traceId,
+      commandId: dup.commandId,
       attemptedAt,
+      pledgeMarkerCountBefore,
+      pledgeMarkerCountAfter,
     }
   }
 
   return {
     blocked: true,
     httpStatus: dup.status,
-    reason: extractFailureReason(dup.body),
+    reason,
+    verbatimBody,
+    correlationId,
+    traceId,
+    commandId: dup.commandId,
     attemptedAt,
+    pledgeMarkerCountBefore,
+    pledgeMarkerCountAfter,
   }
 }
 

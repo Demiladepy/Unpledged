@@ -6,6 +6,7 @@ import { PARTIES } from '../ledger/parties'
 import type { UnpledgedAttestation } from '../types/ledger'
 import { CopyableId } from './CopyableId'
 import { LiveBadge } from './LiveBadge'
+import { LiveDoublePledgeReplay } from './LiveDoublePledgeReplay'
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -266,6 +267,8 @@ export function SplitScreenComparison() {
                 invoices · {attestationCountB} attestations
               </div>
             </div>
+
+            <LiveDoublePledgeReplay compact className="mt-8 bg-bg/90 backdrop-blur-sm" />
           </>
         )}
       </div>

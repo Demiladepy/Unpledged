@@ -7,6 +7,8 @@ import type {
   Invoice,
   LenderTransactionTreeSummary,
   LenderView,
+  LiveDoublePledgeLogLine,
+  LiveDoublePledgeProgress,
   LiveDoublePledgeResult,
   Party,
   PledgeMarker,
@@ -118,13 +120,63 @@ export async function mockListPledgeMarkers(
   return pledgeMarkersForParty(party)
 }
 
-export async function mockAttemptDoublePledgeLive(): Promise<LiveDoublePledgeResult> {
-  await delay(400)
+export async function mockAttemptDoublePledgeLive(
+  onProgress?: LiveDoublePledgeProgress,
+): Promise<LiveDoublePledgeResult> {
+  const lines: LiveDoublePledgeLogLine[] = [
+    {
+      timestamp: new Date().toISOString(),
+      text: 'PART B — double-pledge replay (mock)',
+      variant: 'lime',
+    },
+    {
+      timestamp: new Date().toISOString(),
+      text: 'PledgeMarker count (Lender A ACS): 1',
+      variant: 'info',
+    },
+    {
+      timestamp: new Date().toISOString(),
+      text: 'B2: SME → CompleteFinancing on SAME invoice (expect ledger rejection)…',
+    },
+    {
+      timestamp: new Date().toISOString(),
+      text: 'HTTP 400',
+      variant: 'error',
+    },
+  ]
+  for (const line of lines) {
+    onProgress?.(line)
+    await delay(120)
+  }
+
+  const verbatimBody = JSON.stringify(
+    {
+      code: 'DAML_FAILURE',
+      cause:
+        'Interpretation error: Error: User failure: UNHANDLED_EXCEPTION/DA.Exception.AssertionFailed:AssertionFailed (error category 9): Invoice already pledged',
+      correlationId: 'mock-correlation-id',
+      traceId: 'mock-trace-id',
+      context: {
+        exercise_trace:
+          '    in choice 3a6372bf:Financing:PledgeRegistry:RecordPledge on contract …\n    in choice 3a6372bf:Financing:FinancingCoordinator:CompleteFinancing on contract …\n',
+      },
+    },
+    null,
+    2,
+  )
+
   return {
     blocked: true,
     httpStatus: 400,
-    reason: MOCK_DOUBLE_PLEDGE.reason,
+    reason:
+      'Interpretation error: Error: User failure: UNHANDLED_EXCEPTION/DA.Exception.AssertionFailed:AssertionFailed (error category 9): Invoice already pledged',
+    verbatimBody,
+    correlationId: 'mock-correlation-id',
+    traceId: 'mock-trace-id',
+    commandId: 'unpledged-double-pledge-mock',
     attemptedAt: new Date().toISOString(),
+    pledgeMarkerCountBefore: 1,
+    pledgeMarkerCountAfter: 1,
   }
 }
 

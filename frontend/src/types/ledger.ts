@@ -62,11 +62,27 @@ export interface DoublePledgeAttempt {
   attemptedAt: string
 }
 
+export interface LiveDoublePledgeLogLine {
+  timestamp: string
+  text: string
+  variant?: 'info' | 'success' | 'error' | 'muted' | 'lime'
+}
+
+export type LiveDoublePledgeProgress = (line: LiveDoublePledgeLogLine) => void
+
 export interface LiveDoublePledgeResult {
   blocked: boolean
   httpStatus?: number
+  /** Short summary (e.g. DAML_FAILURE cause) */
   reason: string
+  /** Full HTTP response body from submit-and-wait */
+  verbatimBody: string
+  correlationId?: string
+  traceId?: string
+  commandId: string
   attemptedAt: string
+  pledgeMarkerCountBefore: number
+  pledgeMarkerCountAfter: number
 }
 
 export interface TransactionTreeNode {

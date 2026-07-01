@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  attemptDoublePledgeLive,
   getDoublePledgeAttempt,
   getLenderFinancingTree,
 } from '../ledger/api'
@@ -8,9 +7,9 @@ import { PARTIES } from '../ledger/parties'
 import type {
   DoublePledgeAttempt,
   LenderTransactionTreeSummary,
-  LiveDoublePledgeResult,
 } from '../types/ledger'
 import { CopyableId } from './CopyableId'
+import { LiveDoublePledgeReplay } from './LiveDoublePledgeReplay'
 import { PageHeader } from './PageHeader'
 
 const LIGHTHOUSE_BASE = 'https://lighthouse.devnet.cantonloop.com/party'
@@ -18,9 +17,7 @@ const LIGHTHOUSE_BASE = 'https://lighthouse.devnet.cantonloop.com/party'
 export function DoublePledgeBlocked() {
   const [attempt, setAttempt] = useState<DoublePledgeAttempt | null>(null)
   const [tree, setTree] = useState<LenderTransactionTreeSummary | null>(null)
-  const [liveResult, setLiveResult] = useState<LiveDoublePledgeResult | null>(null)
   const [loading, setLoading] = useState(true)
-  const [attempting, setAttempting] = useState(false)
   const [treeLoading, setTreeLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -50,19 +47,6 @@ export function DoublePledgeBlocked() {
     }
   }, [])
 
-  async function runLiveAttempt() {
-    setAttempting(true)
-    setError(null)
-    try {
-      const result = await attemptDoublePledgeLive()
-      setLiveResult(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setAttempting(false)
-    }
-  }
-
   async function refreshTree() {
     setTreeLoading(true)
     setError(null)
@@ -74,9 +58,6 @@ export function DoublePledgeBlocked() {
       setTreeLoading(false)
     }
   }
-
-  const rejectionText =
-    liveResult?.reason ?? attempt?.reason ?? 'Loading recorded rejection…'
 
   return (
     <div>
@@ -119,38 +100,7 @@ export function DoublePledgeBlocked() {
             </div>
           ) : null}
 
-          <section className="pane mb-6">
-            <div className="border-b border-white/10 px-4 py-4 sm:px-6">
-              <p className="data-label">Live fraud attempt</p>
-              <p className="mt-2 text-sm text-ink-muted">
-                Re-submit a second pledge on INV-001. The ledger must refuse it.
-              </p>
-            </div>
-            <div className="px-4 py-4 sm:px-6 sm:py-5">
-              <button
-                type="button"
-                disabled={attempting}
-                onClick={() => void runLiveAttempt()}
-                className="btn-lime w-full justify-center sm:w-auto"
-              >
-                {attempting ? 'Submitting to ledger…' : 'Attempt second pledge (live)'}
-              </button>
-              {(liveResult || attempt) && (
-                <div className="mt-5">
-                  <p className="data-label mb-2">
-                    Ledger rejection
-                    {liveResult?.httpStatus ? ` · HTTP ${liveResult.httpStatus}` : ''}
-                  </p>
-                  <pre className="terminal-block text-negative">{rejectionText}</pre>
-                  {liveResult?.blocked ? (
-                    <p className="mt-3 text-xs text-lime">
-                      Blocked live at {liveResult.attemptedAt}
-                    </p>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          </section>
+          <LiveDoublePledgeReplay className="mb-6" />
 
           <section className="pane mb-6">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-6">

@@ -7,6 +7,7 @@ import type {
   Invoice,
   LenderTransactionTreeSummary,
   LenderView,
+  LiveDoublePledgeProgress,
   LiveDoublePledgeResult,
   Party,
   PledgeMarker,
@@ -75,10 +76,14 @@ export async function listPledgeMarkers(
     : real.realListPledgeMarkers(party)
 }
 
-export async function attemptDoublePledgeLive(): Promise<LiveDoublePledgeResult> {
+export type { LiveDoublePledgeLogLine, LiveDoublePledgeProgress } from '../types/ledger'
+
+export async function attemptDoublePledgeLive(
+  onProgress?: LiveDoublePledgeProgress,
+): Promise<LiveDoublePledgeResult> {
   return ledgerConfig.useMocks
-    ? mock.mockAttemptDoublePledgeLive()
-    : real.realAttemptDoublePledgeLive()
+    ? mock.mockAttemptDoublePledgeLive(onProgress)
+    : real.realAttemptDoublePledgeLive(onProgress)
 }
 
 export async function getLenderFinancingTree(): Promise<LenderTransactionTreeSummary> {
