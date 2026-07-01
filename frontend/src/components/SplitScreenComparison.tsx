@@ -1,12 +1,20 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 import { getLenderView, listPledgeMarkers } from '../ledger/api'
-import { PARTIES } from '../ledger/parties'
-import type { UnpledgedAttestation } from '../types/ledger'
+import { PARTIES, partyDisplayName } from '../ledger/parties'
+import type { LenderView, UnpledgedAttestation } from '../types/ledger'
 import { CopyableId } from './CopyableId'
 import { LiveBadge } from './LiveBadge'
 import { LiveDoublePledgeReplay } from './LiveDoublePledgeReplay'
 import { TransactionTreeInspector } from './TransactionTreeInspector'
+
+type ViewAsId = 'lender_a' | 'lender_b' | 'sme'
+
+const VIEW_AS_OPTIONS: { id: ViewAsId; label: string; party: string }[] = [
+  { id: 'lender_a', label: 'Lender A', party: PARTIES.LENDER_A },
+  { id: 'lender_b', label: 'Lender B', party: PARTIES.LENDER_B },
+  { id: 'sme', label: 'SME', party: PARTIES.SME },
+]
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -27,6 +35,10 @@ function formatFetchError(message: string): string {
     ].join('\n')
   }
   return message
+}
+
+function contractCount(view: LenderView): number {
+  return view.invoices.length + view.attestations.length + view.pledgeMarkers.length
 }
 
 function DataRow({
@@ -75,19 +87,106 @@ function AttestationRows({ attestation }: { attestation: UnpledgedAttestation })
   )
 }
 
+function PartyProjectionBody({
+  view,
+  pledgeRef,
+}: {
+  view: LenderView
+  pledgeRef: string
+}) {
+  const party = view.party
+  const count = contractCount(view)
+  const attestation = view.attestations[0]
+
+  if (party === PARTIES.LENDER_A && attestation) {
+    return (
+      <>
+        <p className="mb-4 text-xs text-ink-muted">
+          Unpledged attestation · summary fields only
+        </p>
+        <AttestationRows attestation={attestation} />
+        <div className="mt-auto border-t border-white/10 pt-5">
+          <CopyableId value={attestation.contractId} label="Attestation CID" />
+        </div>
+      </>
+    )
+  }
+
+  if (party === PARTIES.LENDER_B && count === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center border border-white/[0.06] px-4 py-12 text-center sm:px-8 sm:py-16">
+        <p className="font-display text-xl font-semibold uppercase tracking-[0.06em] text-ink-300 sm:text-2xl lg:text-3xl">
+          No visibility
+        </p>
+        <p className="mt-4 font-mono text-sm text-denied">
+          · {count} contracts in your ledger view
+        </p>
+        <p className="mt-6 max-w-sm text-sm leading-relaxed text-ink-muted">
+          INV-001 exists on the ledger. Lender B is not a stakeholder and receives
+          no attestation, invoice, or pledge data in ACS queries.
+        </p>
+        {pledgeRef ? (
+          <p className="mt-4 text-xs text-ink-dim">
+            Lender A pledge ref not disclosed to this party
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+
+  if (party === PARTIES.SME && view.invoices.length > 0) {
+    const inv = view.invoices.find((i) => i.invoiceNumber === 'INV-001') ?? view.invoices[0]
+    return (
+      <>
+        <p className="mb-4 text-xs text-ink-muted">
+          Stakeholder view · full invoice visible in ACS
+        </p>
+        <dl>
+          <DataRow label="Invoice" value={inv.invoiceNumber} highlight />
+          <DataRow label="Amount" value={formatCurrency(inv.amount)} />
+          <DataRow label="Due date" value={inv.dueDate} />
+          <DataRow label="Settled on" value={inv.settledOn ?? '—'} />
+          <DataRow label="Debtor" value={partyDisplayName(inv.debtor)} />
+        </dl>
+        <div className="mt-auto border-t border-white/10 pt-5">
+          <CopyableId value={inv.contractId} label="Invoice CID" />
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+      <p className="font-mono text-sm text-ink-muted">
+        {count} contract{count === 1 ? '' : 's'} in ACS
+      </p>
+      <p className="mt-4 text-sm text-ink-dim">
+        No attestation or invoice data matched the expected demo projection.
+      </p>
+    </div>
+  )
+}
+
 function LenderPane({
   side,
   partyId,
   visibility,
+  highlighted,
   children,
 }: {
   side: 'A' | 'B'
   partyId: string
   visibility: 'granted' | 'none'
+  highlighted?: boolean
   children: ReactNode
 }) {
   return (
-    <section className="pane flex min-h-0 flex-col sm:min-h-[420px] lg:min-h-[480px]">
+    <section
+      className={[
+        'pane flex min-h-0 flex-col sm:min-h-[420px] lg:min-h-[480px]',
+        highlighted ? 'projection-pane-active' : '',
+      ].join(' ')}
+    >
       <header className="pane-header flex-col items-stretch gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0">
           <h3 className="pane-title">Lender {side}</h3>
@@ -110,20 +209,25 @@ function LenderPane({
 }
 
 export function SplitScreenComparison() {
-  const [viewA, setViewA] = useState<Awaited<ReturnType<typeof getLenderView>> | null>(
-    null,
-  )
-  const [viewB, setViewB] = useState<Awaited<ReturnType<typeof getLenderView>> | null>(
-    null,
-  )
+  const [viewAs, setViewAs] = useState<ViewAsId>('lender_a')
+  const [activeView, setActiveView] = useState<LenderView | null>(null)
+  const [viewA, setViewA] = useState<LenderView | null>(null)
+  const [viewB, setViewB] = useState<LenderView | null>(null)
   const [pledgeRef, setPledgeRef] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [switching, setSwitching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const activeOption = VIEW_AS_OPTIONS.find((o) => o.id === viewAs) ?? VIEW_AS_OPTIONS[0]
+
+  const queryAsParty = useCallback(async (party: string) => {
+    return getLenderView(party)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
-    async function load() {
-      setLoading(true)
+    async function loadSplit() {
+      setInitialLoading(true)
       setError(null)
       try {
         const [a, b, markers] = await Promise.all([
@@ -135,25 +239,58 @@ export function SplitScreenComparison() {
           setViewA(a)
           setViewB(b)
           setPledgeRef(markers[0]?.invoiceRef ?? '')
-          setLoading(false)
+          setInitialLoading(false)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err))
-          setLoading(false)
+          setInitialLoading(false)
         }
       }
     }
-    void load()
+    void loadSplit()
     return () => {
       cancelled = true
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    async function loadActive() {
+      setSwitching(true)
+      setError(null)
+      try {
+        const view = await queryAsParty(activeOption.party)
+        if (!cancelled) {
+          setActiveView(view)
+          setSwitching(false)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err))
+          setSwitching(false)
+        }
+      }
+    }
+    void loadActive()
+    return () => {
+      cancelled = true
+    }
+  }, [viewAs, activeOption.party, queryAsParty])
+
   const attestationA = viewA?.attestations[0]
   const invoiceCountB = viewB?.invoices.length ?? 0
   const attestationCountB = viewB?.attestations.length ?? 0
   const contractCountB = invoiceCountB + attestationCountB
+
+  const visibilityForActive =
+    activeView && contractCount(activeView) > 0 && activeView.party !== PARTIES.LENDER_B
+      ? 'granted'
+      : activeView?.party === PARTIES.LENDER_B
+        ? 'none'
+        : activeView?.attestations.length
+          ? 'granted'
+          : 'none'
 
   return (
     <div className="home-hero -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
@@ -168,11 +305,46 @@ export function SplitScreenComparison() {
               Per-party ledger view
             </h1>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted sm:text-base">
-              Live ACS queries on Canton DevNet — same invoice, different party
-              projections.
+              Live ACS queries on Canton DevNet — switch party to re-query the ledger
+              yourself.
             </p>
           </div>
           <LiveBadge />
+        </div>
+
+        <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div>
+            <p className="data-label mb-3">View as</p>
+            <div className="party-switcher" role="tablist" aria-label="View as party">
+              {VIEW_AS_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewAs === option.id}
+                  disabled={switching && viewAs === option.id}
+                  onClick={() => setViewAs(option.id)}
+                  className={[
+                    'party-switcher-btn',
+                    viewAs === option.id ? 'party-switcher-btn-active' : '',
+                  ].join(' ')}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {switching ? (
+            <p className="font-mono text-xs text-ink-muted animate-pulse">
+              Querying ledger as {partyDisplayName(activeOption.party)}…
+            </p>
+          ) : activeView ? (
+            <p className="font-mono text-xs text-ink-dim">
+              ACS result · {contractCount(activeView)} contract
+              {contractCount(activeView) === 1 ? '' : 's'} ·{' '}
+              {partyDisplayName(activeView.party)}
+            </p>
+          ) : null}
         </div>
 
         <div className="pane mb-6 border-white/15 bg-bg/80 px-4 py-3 backdrop-blur-sm sm:mb-8 sm:px-5">
@@ -182,9 +354,11 @@ export function SplitScreenComparison() {
           </p>
         </div>
 
-        {loading ? (
-          <div className="pane bg-bg/90 px-5 py-5 backdrop-blur-sm">
-            <p className="text-sm text-ink-muted">Querying active contract sets…</p>
+        {initialLoading && !activeView ? (
+          <div className="pane projection-pane-active mb-6 bg-bg/90 px-5 py-8 backdrop-blur-sm">
+            <p className="font-mono text-sm text-ink-muted">
+              Querying ledger as {partyDisplayName(activeOption.party)}…
+            </p>
           </div>
         ) : error ? (
           <div className="pane bg-bg/90 backdrop-blur-sm">
@@ -197,11 +371,50 @@ export function SplitScreenComparison() {
           </div>
         ) : (
           <>
+            <section className="pane projection-pane-active mb-8 flex min-h-[320px] flex-col sm:min-h-[380px]">
+              <header className="pane-header flex-col items-stretch gap-3 sm:flex-row sm:items-start">
+                <div className="min-w-0">
+                  <h3 className="pane-title">
+                    Live projection · {partyDisplayName(activeOption.party)}
+                  </h3>
+                  <div className="mt-3">
+                    <CopyableId value={activeOption.party} label="Querying as" />
+                  </div>
+                </div>
+                <span
+                  className={[
+                    'shrink-0 self-start',
+                    visibilityForActive === 'granted'
+                      ? 'visibility-granted'
+                      : 'visibility-none',
+                  ].join(' ')}
+                >
+                  {switching
+                    ? 'Querying…'
+                    : `Visibility: ${visibilityForActive === 'granted' ? 'Granted' : 'None'}`}
+                </span>
+              </header>
+              <div
+                className={[
+                  'pane-body flex flex-1 flex-col transition-opacity duration-150',
+                  switching ? 'opacity-40' : 'opacity-100',
+                ].join(' ')}
+              >
+                {activeView ? (
+                  <PartyProjectionBody view={activeView} pledgeRef={pledgeRef} />
+                ) : (
+                  <p className="text-sm text-ink-muted">Waiting for ledger…</p>
+                )}
+              </div>
+            </section>
+
+            <p className="data-label mb-3">Side-by-side comparison</p>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-px lg:border lg:border-white/10 lg:bg-white/10">
               <LenderPane
                 side="A"
                 partyId={PARTIES.LENDER_A}
                 visibility="granted"
+                highlighted={viewAs === 'lender_a'}
               >
                 {attestationA ? (
                   <>
@@ -227,6 +440,7 @@ export function SplitScreenComparison() {
                 side="B"
                 partyId={PARTIES.LENDER_B}
                 visibility="none"
+                highlighted={viewAs === 'lender_b'}
               >
                 <div className="flex flex-1 flex-col items-center justify-center border border-white/[0.06] px-4 py-12 text-center sm:px-8 sm:py-16">
                   <p className="font-display text-xl font-semibold uppercase tracking-[0.06em] text-ink-300 sm:text-2xl lg:text-3xl">
@@ -249,7 +463,7 @@ export function SplitScreenComparison() {
             </div>
 
             <p className="mt-8 text-center font-display text-base font-medium tracking-tight text-ink-200 sm:mt-10 sm:text-lg lg:text-xl">
-              Same invoice. Same ledger. Lender B cannot see it.
+              Same invoice. Same ledger. Switch party — the ACS changes.
             </p>
 
             <div className="mt-6 grid grid-cols-1 gap-3 sm:mt-8 sm:grid-cols-2 sm:gap-px sm:border sm:border-white/10 sm:bg-white/10">
