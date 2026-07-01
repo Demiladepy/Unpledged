@@ -187,6 +187,8 @@ export async function mockGetLenderFinancingTree(): Promise<LenderTransactionTre
     party: PARTIES.LENDER_A,
     nodes: [],
     invoiceNodeCount: 0,
+    fullTreeInvoiceNodeCount: 0,
+    fetchedAt: new Date().toISOString(),
     lenderVisibleNodes: [
       {
         nodeId: '1',

@@ -98,8 +98,13 @@ export interface LenderTransactionTreeSummary {
   updateId: string
   party: Party
   nodes: TransactionTreeNode[]
+  /** Invoice template nodes visible to the queried party */
   invoiceNodeCount: number
+  /** Invoice template nodes anywhere in the transaction (any witness) */
+  fullTreeInvoiceNodeCount: number
   lenderVisibleNodes: TransactionTreeNode[]
+  /** When the tree was fetched from the ledger API */
+  fetchedAt: string
 }
 
 export interface CreateFinancingOfferInput {

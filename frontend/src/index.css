@@ -273,6 +273,36 @@ body {
     word-break: break-word;
   }
 
+  .inspector-stamp {
+    border: 1px solid color-mix(in srgb, var(--color-lime) 35%, transparent);
+    background-color: color-mix(in srgb, var(--color-lime) 6%, transparent);
+    padding: 0.35rem 0.65rem;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-lime);
+  }
+
+  .inspector-node-list {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+
+  .inspector-node-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 0.75rem;
+    border-bottom: 1px solid color-mix(in srgb, white 6%, transparent);
+    padding: 0.75rem 1rem;
+  }
+
+  .inspector-node-row:last-child {
+    border-bottom: none;
+  }
+
   .data-table-head {
     display: grid;
     border-bottom: 1px solid var(--color-border);

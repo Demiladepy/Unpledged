@@ -769,12 +769,15 @@ export async function realGetLenderFinancingTree(
   const nodes = parseTransactionTreeNodes(tree, party)
   const lenderVisibleNodes = nodes.filter((n) => n.lenderVisible)
   const invoiceNodeCount = lenderVisibleNodes.filter((n) => n.isInvoiceTemplate).length
+  const fullTreeInvoiceNodeCount = nodes.filter((n) => n.isInvoiceTemplate).length
 
   return {
     updateId,
     party,
     nodes,
     invoiceNodeCount,
+    fullTreeInvoiceNodeCount,
     lenderVisibleNodes,
+    fetchedAt: new Date().toISOString(),
   }
 }
