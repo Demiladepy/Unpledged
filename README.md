@@ -41,6 +41,7 @@ Open `http://localhost:5173`. See [DEMO_SCRIPT.md](./DEMO_SCRIPT.md) for the 3-m
 | `/sme` | SME portfolio — **Request financing** creates `FinancingOffer` on ledger |
 | `/lender` | Lender A — **Fund** runs SME `CompleteFinancing` |
 | `/blocked` | Double-pledge narrative + live replay + tree inspector + Lighthouse |
+| `/demo` | **Full happy-path flow** — fresh invoice create → attest → finance → block |
 | `/smoke` | Token + ledger-end diagnostics |
 
 ## Verification
@@ -48,6 +49,7 @@ Open `http://localhost:5173`. See [DEMO_SCRIPT.md](./DEMO_SCRIPT.md) for the 3-m
 ```bash
 cd frontend
 npm run smoke:ledger
+npm run verify:demo-flow       # Full happy path on fresh invoice
 npm run verify:all
 npx tsx server/verifyBrowserUi.ts http://localhost:5173   # dev server must be running
 ```
@@ -59,3 +61,11 @@ npm run mcp:verify   # from repo root
 ```
 
 Enable **canton-dev** in Cursor MCP settings (`.cursor/mcp.json`).
+
+## Deploy (Vercel)
+
+1. Import repo · set **Root Directory** to `frontend`
+2. Add env vars from [SUBMISSION.md](./SUBMISSION.md) checklist (`CANTON_CLIENT_SECRET` + `VITE_PARTY_*` + `VITE_USE_MOCKS=false`)
+3. Deploy — serverless routes in `frontend/api/` proxy token + ledger
+4. Verify hosted URL against checklist in SUBMISSION.md
+

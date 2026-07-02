@@ -224,3 +224,114 @@ export async function mockGetLenderFinancingTree(): Promise<LenderTransactionTre
     ],
   }
 }
+
+function mockCommandResult(ok = true, httpStatus = 200): import('../types/demoFlow').DemoLedgerCommandResult {
+  return {
+    ok,
+    httpStatus,
+    commandId: `unpledged-demo-mock-${Date.now()}`,
+    updateId: `mock-update-${Date.now()}`,
+    verbatimBody: JSON.stringify(
+      { updateId: `mock-update-${Date.now()}`, code: ok ? undefined : 'DAML_FAILURE' },
+      null,
+      2,
+    ),
+    correlationId: `mock-corr-${Date.now()}`,
+    traceId: `mock-trace-${Date.now()}`,
+    reason: ok ? undefined : 'Invoice already pledged',
+  }
+}
+
+export function mockNewDemoInvoiceNumber(): string {
+  return `INV-DEMO-MOCK-${Date.now()}`
+}
+
+export async function mockDemoStep1CreateInvoice(
+  invoiceNumber: string = mockNewDemoInvoiceNumber(),
+): Promise<import('../types/demoFlow').DemoStep1Result> {
+  await delay(300)
+  return {
+    invoice: {
+      contractId: `#demo-inv-${Date.now()}`,
+      owner: PARTIES.SME,
+      debtor: PARTIES.DEBTOR,
+      amount: 1000,
+      dueDate: '2026-01-31',
+      invoiceNumber,
+      settledOn: '2026-01-20',
+    },
+    result: mockCommandResult(),
+  }
+}
+
+export async function mockDemoStep2Attestation(
+  _invoiceCid: string,
+): Promise<import('../types/demoFlow').DemoStep2Result> {
+  await delay(300)
+  const attestation: import('../types/ledger').UnpledgedAttestation = {
+    contractId: `#demo-att-${Date.now()}`,
+    owner: PARTIES.SME,
+    lender: PARTIES.LENDER_A,
+    periodStart: '2026-01-01',
+    periodEnd: '2026-01-31',
+    settledCount: 1,
+    settledTotal: 1000,
+    allSettledOnTime: true,
+  }
+  return {
+    attestation,
+    result: mockCommandResult(),
+    privacy: {
+      attestationCid: attestation.contractId,
+      lenderASeesAttestation: true,
+      lenderBSeesAttestation: false,
+      lenderAInvoiceCount: 0,
+      lenderBAttestationCount: 0,
+      lenderBInvoiceCount: 0,
+    },
+  }
+}
+
+export async function mockDemoStep3Offer(
+  attestationCid: string,
+): Promise<import('../types/demoFlow').DemoStep3Result> {
+  await delay(300)
+  return {
+    offer: {
+      contractId: `#demo-offer-${Date.now()}`,
+      lender: PARTIES.LENDER_A,
+      sme: PARTIES.SME,
+      attestationCid,
+      advanceAmount: 900,
+      status: 'pending',
+    },
+    result: mockCommandResult(),
+  }
+}
+
+export async function mockDemoStep4Finance(
+  _invoiceCid: string,
+  _offerCid: string,
+): Promise<import('../types/demoFlow').DemoStep4Result> {
+  await delay(300)
+  return {
+    marker: {
+      contractId: `#demo-marker-${Date.now()}`,
+      invoiceOwner: PARTIES.SME,
+      lender: PARTIES.LENDER_A,
+      invoiceRef: 'INVREF-mock',
+    },
+    result: mockCommandResult(),
+  }
+}
+
+export async function mockDemoStep5DoublePledge(
+  _invoiceCid: string,
+  _attestationCid: string,
+): Promise<import('../types/demoFlow').DemoStep5Result> {
+  await delay(300)
+  return {
+    result: mockCommandResult(false, 400),
+    blocked: true,
+  }
+}

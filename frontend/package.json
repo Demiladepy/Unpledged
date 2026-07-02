@@ -17,6 +17,7 @@
     "verify:live-ui": "tsx server/verifyLiveUi.ts",
     "verify:browser-ui": "tsx server/verifyBrowserUi.ts",
     "verify:tree": "tsx server/verifyTransactionTree.ts",
+    "verify:demo-flow": "tsx server/verifyDemoFlow.ts",
     "verify:all": "tsx server/verifyLiveUi.ts && tsx server/verifyTransactionTree.ts"
   },
   "dependencies": {

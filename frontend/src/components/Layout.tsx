@@ -4,6 +4,7 @@ import { ledgerConfig } from '../ledger/config'
 import { PARTIES, partyDisplayName } from '../ledger/parties'
 import { CopyableId } from './CopyableId'
 import { IconMenu, IconX } from './icons'
+import { LedgerHeartbeat } from './LedgerHeartbeat'
 import { LiveBadge } from './LiveBadge'
 
 const navItems = [
@@ -11,6 +12,7 @@ const navItems = [
   { to: '/sme', label: 'SME' },
   { to: '/lender', label: 'Lender' },
   { to: '/blocked', label: 'Blocked' },
+  { to: '/demo', label: 'Full flow' },
   { to: '/smoke', label: 'Diag' },
 ] as const
 
@@ -52,7 +54,8 @@ export function Layout() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+              <LedgerHeartbeat />
               <LiveBadge />
               <button
                 type="button"

@@ -15,6 +15,15 @@ import type {
   TransactionTreeNode,
   UnpledgedAttestation,
 } from '../types/ledger'
+import type {
+  DemoLedgerCommandResult,
+  DemoPrivacyCheck,
+  DemoStep1Result,
+  DemoStep2Result,
+  DemoStep3Result,
+  DemoStep4Result,
+  DemoStep5Result,
+} from '../types/demoFlow'
 import { ledgerClient, newCommandId } from './client'
 import { getAccessToken } from './auth'
 import { ledgerConfig } from './config'
@@ -779,5 +788,346 @@ export async function realGetLenderFinancingTree(
     fullTreeInvoiceNodeCount,
     lenderVisibleNodes,
     fetchedAt: new Date().toISOString(),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Live demo flow — fresh invoice happy path (see /demo)
+// ---------------------------------------------------------------------------
+
+function toDemoCommandResult(raw: {
+  ok: boolean
+  status: number
+  body: string
+  commandId: string
+}): DemoLedgerCommandResult {
+  const ids = parseLedgerErrorIds(raw.body)
+  let updateId: string | undefined
+  try {
+    updateId = (JSON.parse(raw.body) as SubmitAndWaitResponse).updateId
+  } catch {
+    updateId = undefined
+  }
+  return {
+    ok: raw.ok,
+    httpStatus: raw.status,
+    commandId: raw.commandId,
+    updateId,
+    verbatimBody: formatVerbatimBody(raw.body),
+    correlationId: ids.correlationId,
+    traceId: ids.traceId,
+    reason: raw.ok ? undefined : ids.reason,
+  }
+}
+
+export function newDemoInvoiceNumber(): string {
+  return `INV-DEMO-${Date.now()}`
+}
+
+export async function realDemoStep1CreateInvoice(
+  invoiceNumber: string = newDemoInvoiceNumber(),
+): Promise<DemoStep1Result> {
+  const raw = await submitAndWaitRaw(
+    [PARTIES.SME, PARTIES.DEBTOR],
+    [
+      {
+        CreateCommand: {
+          templateId: TEMPLATE_IDS.Invoice,
+          createArguments: {
+            owner: PARTIES.SME,
+            debtor: PARTIES.DEBTOR,
+            amount: '1000.00',
+            dueDate: '2026-01-31',
+            invoiceNumber,
+            settledOn: '2026-01-20',
+          },
+        },
+      },
+    ],
+    newCommandId('demo-invoice'),
+  )
+
+  if (!raw.ok) {
+    throw new Error(
+      `Invoice create failed (HTTP ${raw.status}): ${formatVerbatimBody(raw.body)}`,
+    )
+  }
+
+  const invoices = await queryActiveContracts(
+    PARTIES.SME,
+    TEMPLATE_QUERY_IDS.Invoice,
+  )
+  const invoice = invoices
+    .map(parseInvoice)
+    .find((inv) => inv.invoiceNumber === invoiceNumber)
+  if (!invoice) {
+    throw new Error(`Invoice ${invoiceNumber} not found in SME ACS after create`)
+  }
+
+  return { invoice, result: toDemoCommandResult(raw) }
+}
+
+export async function realDemoStep2Attestation(
+  invoiceCid: string,
+): Promise<DemoStep2Result> {
+  const raw = await submitAndWaitRaw(
+    [PARTIES.SME],
+    [
+      {
+        CreateAndExerciseCommand: {
+          templateId: TEMPLATE_IDS.AttestationFactory,
+          createArguments: { owner: PARTIES.SME },
+          choice: CHOICE_NAMES.ProveUnpledged,
+          choiceArgument: {
+            lender: PARTIES.LENDER_A,
+            invoiceCids: [invoiceCid],
+            periodStart: '2026-01-01',
+            periodEnd: '2026-01-31',
+          },
+        },
+      },
+    ],
+    newCommandId('demo-attestation'),
+  )
+
+  if (!raw.ok) {
+    throw new Error(
+      `ProveUnpledged failed (HTTP ${raw.status}): ${formatVerbatimBody(raw.body)}`,
+    )
+  }
+
+  const attestations = await queryActiveContracts(
+    PARTIES.SME,
+    TEMPLATE_QUERY_IDS.UnpledgedAttestation,
+  )
+  const attestation = attestations
+    .map(parseAttestation)
+    .filter((a) => a.lender === PARTIES.LENDER_A)
+    .at(-1)
+  if (!attestation) {
+    throw new Error('UnpledgedAttestation not found after ProveUnpledged')
+  }
+
+  const [viewA, viewB] = await Promise.all([
+    realGetLenderView(PARTIES.LENDER_A),
+    realGetLenderView(PARTIES.LENDER_B),
+  ])
+
+  const privacy: DemoPrivacyCheck = {
+    attestationCid: attestation.contractId,
+    lenderASeesAttestation: viewA.attestations.some(
+      (a) => a.contractId === attestation.contractId,
+    ),
+    lenderBSeesAttestation: viewB.attestations.some(
+      (a) => a.contractId === attestation.contractId,
+    ),
+    lenderAInvoiceCount: viewA.invoices.length,
+    lenderBAttestationCount: viewB.attestations.length,
+    lenderBInvoiceCount: viewB.invoices.length,
+  }
+
+  return { attestation, result: toDemoCommandResult(raw), privacy }
+}
+
+export async function realDemoStep3Offer(
+  attestationCid: string,
+): Promise<DemoStep3Result> {
+  const raw = await submitAndWaitRaw(
+    [PARTIES.LENDER_A],
+    [
+      {
+        CreateCommand: {
+          templateId: TEMPLATE_IDS.FinancingOffer,
+          createArguments: {
+            lender: PARTIES.LENDER_A,
+            sme: PARTIES.SME,
+            attestationCid,
+            advanceAmount: '900.00',
+          },
+        },
+      },
+    ],
+    newCommandId('demo-offer'),
+  )
+
+  if (!raw.ok) {
+    throw new Error(
+      `FinancingOffer create failed (HTTP ${raw.status}): ${formatVerbatimBody(raw.body)}`,
+    )
+  }
+
+  const offers = await queryActiveContracts(
+    PARTIES.LENDER_A,
+    TEMPLATE_QUERY_IDS.FinancingOffer,
+  )
+  const offerEvent = offers.at(-1)
+  if (!offerEvent) {
+    throw new Error('FinancingOffer not found after create')
+  }
+
+  return { offer: parseFinancingOffer(offerEvent), result: toDemoCommandResult(raw) }
+}
+
+async function resolveFinancingInfrastructure(): Promise<{
+  coordinatorCid: string
+  registryCid: string
+}> {
+  const [coordinators, registries] = await Promise.all([
+    queryActiveContracts(PARTIES.SME, TEMPLATE_QUERY_IDS.FinancingCoordinator),
+    queryActiveContracts(PARTIES.SME, TEMPLATE_QUERY_IDS.PledgeRegistry),
+  ])
+
+  let coordinatorCid = coordinators.at(-1)?.contractId
+  let registryCid = registries.at(-1)?.contractId
+
+  if (!coordinatorCid || !registryCid) {
+    const setup = await submitAndWaitRaw(
+      [PARTIES.SME],
+      [
+        {
+          CreateCommand: {
+            templateId: TEMPLATE_IDS.FinancingCoordinator,
+            createArguments: { sme: PARTIES.SME },
+          },
+        },
+        {
+          CreateCommand: {
+            templateId: TEMPLATE_IDS.PledgeRegistry,
+            createArguments: { owner: PARTIES.SME, pledgedRefs: [] },
+          },
+        },
+      ],
+      newCommandId('demo-setup'),
+    )
+    if (!setup.ok) {
+      throw new Error(
+        `Financing setup failed (HTTP ${setup.status}): ${formatVerbatimBody(setup.body)}`,
+      )
+    }
+    const [coordsAfter, regsAfter] = await Promise.all([
+      queryActiveContracts(PARTIES.SME, TEMPLATE_QUERY_IDS.FinancingCoordinator),
+      queryActiveContracts(PARTIES.SME, TEMPLATE_QUERY_IDS.PledgeRegistry),
+    ])
+    coordinatorCid = coordsAfter.at(-1)?.contractId
+    registryCid = regsAfter.at(-1)?.contractId
+  }
+
+  if (!coordinatorCid || !registryCid) {
+    throw new Error('Could not resolve FinancingCoordinator / PledgeRegistry')
+  }
+
+  return { coordinatorCid, registryCid }
+}
+
+export async function realDemoStep4Finance(
+  invoiceCid: string,
+  offerCid: string,
+): Promise<DemoStep4Result> {
+  const { coordinatorCid, registryCid } = await resolveFinancingInfrastructure()
+
+  const raw = await submitAndWaitRaw(
+    [PARTIES.SME],
+    [
+      {
+        ExerciseCommand: {
+          templateId: TEMPLATE_IDS.FinancingCoordinator,
+          contractId: coordinatorCid,
+          choice: CHOICE_NAMES.CompleteFinancing,
+          choiceArgument: {
+            invoiceCid,
+            offerCid,
+            pledgeRegistryCid: registryCid,
+          },
+        },
+      },
+    ],
+    newCommandId('demo-finance'),
+  )
+
+  if (!raw.ok) {
+    throw new Error(
+      `CompleteFinancing failed (HTTP ${raw.status}): ${formatVerbatimBody(raw.body)}`,
+    )
+  }
+
+  const markers = await queryActiveContracts(
+    PARTIES.LENDER_A,
+    TEMPLATE_QUERY_IDS.PledgeMarker,
+  )
+  const markerEvent = markers.at(-1)
+  if (!markerEvent) {
+    throw new Error('PledgeMarker not found after CompleteFinancing')
+  }
+
+  return { marker: parsePledgeMarker(markerEvent), result: toDemoCommandResult(raw) }
+}
+
+export async function realDemoStep5DoublePledge(
+  invoiceCid: string,
+  attestationCid: string,
+): Promise<DemoStep5Result> {
+  const { coordinatorCid, registryCid } = await resolveFinancingInfrastructure()
+
+  const offerRaw = await submitAndWaitRaw(
+    [PARTIES.LENDER_A],
+    [
+      {
+        CreateCommand: {
+          templateId: TEMPLATE_IDS.FinancingOffer,
+          createArguments: {
+            lender: PARTIES.LENDER_A,
+            sme: PARTIES.SME,
+            attestationCid,
+            advanceAmount: '500.00',
+          },
+        },
+      },
+    ],
+    newCommandId('demo-offer-2'),
+  )
+
+  if (!offerRaw.ok) {
+    throw new Error(
+      `Second offer create failed (HTTP ${offerRaw.status}): ${formatVerbatimBody(offerRaw.body)}`,
+    )
+  }
+
+  const offers = await queryActiveContracts(
+    PARTIES.LENDER_A,
+    TEMPLATE_QUERY_IDS.FinancingOffer,
+  )
+  const offer2 = offers.at(-1)
+  if (!offer2) {
+    throw new Error('Second FinancingOffer not found')
+  }
+
+  const registriesRefreshed = await queryActiveContracts(
+    PARTIES.SME,
+    TEMPLATE_QUERY_IDS.PledgeRegistry,
+  )
+  const registryAfter = registriesRefreshed.at(-1)?.contractId ?? registryCid
+
+  const dup = await submitAndWaitRaw(
+    [PARTIES.SME],
+    [
+      {
+        ExerciseCommand: {
+          templateId: TEMPLATE_IDS.FinancingCoordinator,
+          contractId: coordinatorCid,
+          choice: CHOICE_NAMES.CompleteFinancing,
+          choiceArgument: {
+            invoiceCid,
+            offerCid: offer2.contractId,
+            pledgeRegistryCid: registryAfter,
+          },
+        },
+      },
+    ],
+    newCommandId('demo-dup'),
+  )
+
+  return {
+    result: toDemoCommandResult(dup),
+    blocked: !dup.ok,
   }
 }

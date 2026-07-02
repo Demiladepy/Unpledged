@@ -120,3 +120,39 @@ export async function fundFinancingOffer(offerCid: string): Promise<PledgeMarker
     invoiceNumber: pending[0].invoiceNumber,
   })
 }
+
+export function newDemoInvoiceNumber(): string {
+  return ledgerConfig.useMocks
+    ? mock.mockNewDemoInvoiceNumber()
+    : real.newDemoInvoiceNumber()
+}
+
+export async function demoStep1CreateInvoice(invoiceNumber?: string) {
+  return ledgerConfig.useMocks
+    ? mock.mockDemoStep1CreateInvoice(invoiceNumber)
+    : real.realDemoStep1CreateInvoice(invoiceNumber)
+}
+
+export async function demoStep2Attestation(invoiceCid: string) {
+  return ledgerConfig.useMocks
+    ? mock.mockDemoStep2Attestation(invoiceCid)
+    : real.realDemoStep2Attestation(invoiceCid)
+}
+
+export async function demoStep3Offer(attestationCid: string) {
+  return ledgerConfig.useMocks
+    ? mock.mockDemoStep3Offer(attestationCid)
+    : real.realDemoStep3Offer(attestationCid)
+}
+
+export async function demoStep4Finance(invoiceCid: string, offerCid: string) {
+  return ledgerConfig.useMocks
+    ? mock.mockDemoStep4Finance(invoiceCid, offerCid)
+    : real.realDemoStep4Finance(invoiceCid, offerCid)
+}
+
+export async function demoStep5DoublePledge(invoiceCid: string, attestationCid: string) {
+  return ledgerConfig.useMocks
+    ? mock.mockDemoStep5DoublePledge(invoiceCid, attestationCid)
+    : real.realDemoStep5DoublePledge(invoiceCid, attestationCid)
+}

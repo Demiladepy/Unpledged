@@ -416,6 +416,9 @@ export function SplitScreenComparison() {
                 visibility="granted"
                 highlighted={viewAs === 'lender_a'}
               >
+                <p className="mb-4 font-display text-2xl font-semibold tracking-tight text-lime sm:text-3xl">
+                  {(viewA?.attestations.length ?? 0) > 0 ? '1 attestation' : '0 contracts'}
+                </p>
                 {attestationA ? (
                   <>
                     <p className="mb-4 text-xs text-ink-muted">
@@ -442,6 +445,9 @@ export function SplitScreenComparison() {
                 visibility="none"
                 highlighted={viewAs === 'lender_b'}
               >
+                <p className="mb-4 font-display text-2xl font-semibold tracking-tight text-denied sm:text-3xl">
+                  {contractCountB} contracts
+                </p>
                 <div className="flex flex-1 flex-col items-center justify-center border border-white/[0.06] px-4 py-12 text-center sm:px-8 sm:py-16">
                   <p className="font-display text-xl font-semibold uppercase tracking-[0.06em] text-ink-300 sm:text-2xl lg:text-3xl">
                     No visibility

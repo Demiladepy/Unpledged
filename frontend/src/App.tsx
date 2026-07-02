@@ -4,6 +4,7 @@ import { SplitScreenComparison } from './components/SplitScreenComparison'
 import { SmeView } from './components/SmeView'
 import { LenderViewPage } from './components/LenderView'
 import { DoublePledgeBlocked } from './components/DoublePledgeBlocked'
+import { LiveDemoFlowPage } from './components/LiveDemoFlowPage'
 import { SmokeTestPage } from './components/SmokeTestPage'
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
           <Route path="sme" element={<SmeView />} />
           <Route path="lender" element={<LenderViewPage />} />
           <Route path="blocked" element={<DoublePledgeBlocked />} />
+          <Route path="demo" element={<LiveDemoFlowPage />} />
           <Route path="smoke" element={<SmokeTestPage />} />
         </Route>
       </Routes>
