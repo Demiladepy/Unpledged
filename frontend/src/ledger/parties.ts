@@ -14,10 +14,12 @@ export const PARTIES = {
     (import.meta.env.VITE_PARTY_LENDER_B as string | undefined) || 'LenderB',
 } as const satisfies Record<string, Party>
 
-/** Short label for UI (prefix before ::). */
+/** Short, human label for UI (prefix before ::, camelCase split). */
 export function partyDisplayName(party: Party): string {
   const idx = party.indexOf('::')
-  return idx >= 0 ? party.slice(0, idx) : party
+  const raw = idx >= 0 ? party.slice(0, idx) : party
+  // "LenderA" -> "Lender A"; leaves "SME" / "Debtor" untouched.
+  return raw.replace(/([a-z])([A-Z0-9])/g, '$1 $2')
 }
 
 export function partiesConfigured(): boolean {

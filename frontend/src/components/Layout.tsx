@@ -74,18 +74,19 @@ export function Layout() {
           </div>
 
           <div className="mt-3 hidden items-center justify-between gap-4 lg:flex">
-            <div className="min-w-0">
-              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+            <div className="inline-flex min-w-0 items-center gap-3 border border-white/10 bg-white/[0.02] px-3 py-2">
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
                 {acting.label}
-              </p>
+              </span>
+              <span className="h-3.5 w-px shrink-0 bg-white/10" aria-hidden />
               {showPartyId ? (
-                <CopyableId value={acting.party} className="mt-1" />
+                <CopyableId value={acting.party} />
               ) : (
-                <p className="mt-1 font-display text-xs font-medium uppercase tracking-wider text-ink-300">
+                <span className="truncate font-display text-xs font-medium tracking-wide text-ink-200">
                   {pathname === '/'
                     ? `${partyDisplayName(PARTIES.LENDER_A)} / ${partyDisplayName(PARTIES.LENDER_B)}`
-                    : acting.party}
-                </p>
+                    : partyDisplayName(acting.party)}
+                </span>
               )}
             </div>
 
@@ -131,18 +132,18 @@ export function Layout() {
             </nav>
           ) : null}
 
-          <div className="mt-3 border-t border-white/[0.06] pt-3 lg:hidden">
-            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/[0.06] pt-3 lg:hidden">
+            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
               {acting.label}
-            </p>
+            </span>
             {showPartyId ? (
-              <CopyableId value={acting.party} className="mt-1 flex-wrap" />
+              <CopyableId value={acting.party} className="flex-wrap" />
             ) : (
-              <p className="mt-1 text-xs text-ink-300">
+              <span className="font-display text-xs font-medium tracking-wide text-ink-200">
                 {pathname === '/'
                   ? `${partyDisplayName(PARTIES.LENDER_A)} / ${partyDisplayName(PARTIES.LENDER_B)}`
-                  : acting.party}
-              </p>
+                  : partyDisplayName(acting.party)}
+              </span>
             )}
           </div>
         </div>
