@@ -13,7 +13,6 @@ const navItems = [
   { to: '/lender', label: 'Lender' },
   { to: '/blocked', label: 'Blocked' },
   { to: '/demo', label: 'Full flow' },
-  { to: '/smoke', label: 'Diag' },
 ] as const
 
 function actingPartyForPath(pathname: string): { label: string; party: string } {
