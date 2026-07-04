@@ -73,6 +73,7 @@ export function SmokeTestPage() {
         onClick={() => void run()}
         className="btn-lime"
       >
+        {running ? <span className="spinner" aria-hidden /> : null}
         {running ? 'Running…' : 'Run smoke test'}
       </button>
 

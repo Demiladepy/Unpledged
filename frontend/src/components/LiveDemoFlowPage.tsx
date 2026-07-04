@@ -18,7 +18,7 @@ type StepStatus = 'pending' | 'running' | 'done' | 'error'
 
 function CommandTerminal({ result }: { result: DemoLedgerCommandResult }) {
   return (
-    <div className="mt-4">
+    <div className="animate-rise-sm mt-4">
       <p className="data-label mb-2">
         Ledger response · HTTP {result.httpStatus}
         {result.ok ? ' · OK' : ' · REJECTED'}
@@ -72,8 +72,15 @@ function StepPanel({
   onRun,
   children,
 }: StepPanelProps) {
+  const active = status === 'running' || status === 'done'
   return (
-    <section className="pane">
+    <section
+      style={{ ['--stagger' as string]: step - 1 }}
+      className={[
+        'stagger-item pane pane-interactive transition-colors duration-300',
+        active ? 'projection-pane-active' : '',
+      ].join(' ')}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-6">
         <div className="min-w-0">
           <p className="data-label">Step {step}</p>
@@ -84,7 +91,7 @@ function StepPanel({
         </div>
         <span
           className={[
-            'shrink-0 font-mono text-[10px] font-semibold uppercase tracking-wider',
+            'inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider',
             status === 'done'
               ? 'text-lime'
               : status === 'error'
@@ -94,6 +101,10 @@ function StepPanel({
                   : 'text-ink-dim',
           ].join(' ')}
         >
+          {status === 'running' ? <span className="spinner" aria-hidden /> : null}
+          {status === 'done' ? (
+            <span className="h-1.5 w-1.5 rounded-full bg-lime" aria-hidden />
+          ) : null}
           {status === 'running'
             ? 'Submitting…'
             : status === 'done'
@@ -110,7 +121,14 @@ function StepPanel({
           onClick={() => void onRun()}
           className="btn-lime w-full justify-center sm:w-auto"
         >
-          {status === 'running' ? 'Querying ledger…' : `Run step ${step}`}
+          {status === 'running' ? (
+            <>
+              <span className="spinner" aria-hidden />
+              Querying ledger…
+            </>
+          ) : (
+            `Run step ${step}`
+          )}
         </button>
         {children}
       </div>
@@ -349,8 +367,8 @@ export function LiveDemoFlowPage() {
           onRun={runStep4}
         >
           {session.pledgeMarkerCid ? (
-            <div className="mt-4">
-              <p className="mb-2 font-display text-sm font-semibold uppercase tracking-wider text-lime">
+            <div className="animate-rise-sm mt-4">
+              <p className="animate-pop mb-2 font-display text-sm font-semibold uppercase tracking-wider text-lime">
                 Funding succeeded
               </p>
               <CopyableId value={session.pledgeMarkerCid} label="PledgeMarker CID" />
@@ -374,7 +392,7 @@ export function LiveDemoFlowPage() {
                   Unexpected success — double pledge should have been blocked
                 </p>
               ) : (
-                <p className="mt-4 font-display text-sm font-semibold uppercase tracking-wider text-lime">
+                <p className="animate-pop mt-4 font-display text-sm font-semibold uppercase tracking-wider text-lime">
                   Fraud blocked on invoice you just financed
                 </p>
               )}

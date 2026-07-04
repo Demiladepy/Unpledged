@@ -68,7 +68,9 @@ export function TransactionTreeInspector({
 
   return (
     <section
-      className={['pane inspector-panel', className].filter(Boolean).join(' ')}
+      className={['pane pane-interactive inspector-panel', className]
+        .filter(Boolean)
+        .join(' ')}
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-6">
         <div className="min-w-0 flex-1">
@@ -91,8 +93,9 @@ export function TransactionTreeInspector({
             type="button"
             disabled={loading || refreshing}
             onClick={() => void loadTree(true)}
-            className="border border-white/10 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-muted hover:text-lime disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 border border-white/10 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-muted transition-colors hover:border-white/20 hover:text-lime disabled:opacity-50"
           >
+            {refreshing ? <span className="spinner" aria-hidden /> : null}
             {refreshing ? 'Querying…' : 'Refresh from ledger'}
           </button>
         </div>
@@ -100,9 +103,17 @@ export function TransactionTreeInspector({
 
       <div className="px-4 py-4 sm:px-6 sm:py-5">
         {loading ? (
-          <p className="font-mono text-sm text-ink-muted">
-            GET transaction-tree-by-id… projecting for {partyLabel}
-          </p>
+          <div>
+            <p className="mb-4 inline-flex items-center gap-2 font-mono text-sm text-ink-muted">
+              <span className="spinner" aria-hidden />
+              GET transaction-tree-by-id… projecting for {partyLabel}
+            </p>
+            <div className="space-y-2">
+              <div className="skeleton h-10 w-full" />
+              <div className="skeleton h-8 w-full" />
+              <div className="skeleton h-8 w-5/6" />
+            </div>
+          </div>
         ) : error ? (
           <pre className="terminal-block text-negative">{error}</pre>
         ) : tree ? (
@@ -119,7 +130,7 @@ export function TransactionTreeInspector({
 
             <div
               className={[
-                'inspector-verdict mt-6 border px-4 py-5 sm:px-6',
+                'inspector-verdict animate-rise-sm mt-6 border px-4 py-5 sm:px-6',
                 tree.invoiceNodeCount === 0
                   ? 'border-lime/30 bg-lime/[0.04]'
                   : 'border-negative/30 bg-negative/[0.04]',
@@ -131,8 +142,9 @@ export function TransactionTreeInspector({
               <p className="mt-3 font-mono text-sm text-ink-200 sm:text-base">
                 Invoice nodes in {partyLabel}&apos;s view:{' '}
                 <span
+                  key={tree.invoiceNodeCount}
                   className={[
-                    'font-display text-3xl font-semibold sm:text-4xl',
+                    'animate-pop inline-block font-display text-3xl font-semibold sm:text-4xl',
                     tree.invoiceNodeCount === 0 ? 'text-lime' : 'text-negative',
                   ].join(' ')}
                 >
@@ -167,8 +179,12 @@ export function TransactionTreeInspector({
                     No nodes in party projection
                   </li>
                 ) : (
-                  tree.lenderVisibleNodes.map((node) => (
-                    <li key={node.nodeId} className="inspector-node-row">
+                  tree.lenderVisibleNodes.map((node, i) => (
+                    <li
+                      key={node.nodeId}
+                      style={{ ['--stagger' as string]: i }}
+                      className="stagger-item inspector-node-row"
+                    >
                       <span className="text-ink-dim">[{node.nodeId}]</span>
                       <span className="text-ink-muted">{node.kind}</span>
                       <span className="text-ink-100">{formatNodeLabel(node)}</span>

@@ -172,18 +172,21 @@ function LenderPane({
   partyId,
   visibility,
   highlighted,
+  index = 0,
   children,
 }: {
   side: 'A' | 'B'
   partyId: string
   visibility: 'granted' | 'none'
   highlighted?: boolean
+  index?: number
   children: ReactNode
 }) {
   return (
     <section
+      style={{ ['--stagger' as string]: index }}
       className={[
-        'pane flex min-h-0 flex-col sm:min-h-[420px] lg:min-h-[480px]',
+        'stagger-item pane pane-interactive flex min-h-0 flex-col sm:min-h-[420px] lg:min-h-[480px]',
         highlighted ? 'projection-pane-active' : '',
       ].join(' ')}
     >
@@ -335,11 +338,15 @@ export function SplitScreenComparison() {
             </div>
           </div>
           {switching ? (
-            <p className="font-mono text-xs text-ink-muted animate-pulse">
+            <p className="inline-flex items-center gap-2 font-mono text-xs text-ink-muted">
+              <span className="spinner" aria-hidden />
               Querying ledger as {partyDisplayName(activeOption.party)}…
             </p>
           ) : activeView ? (
-            <p className="font-mono text-xs text-ink-dim">
+            <p
+              key={`${activeView.party}-${contractCount(activeView)}`}
+              className="animate-fade font-mono text-xs text-ink-dim"
+            >
               ACS result · {contractCount(activeView)} contract
               {contractCount(activeView) === 1 ? '' : 's'} ·{' '}
               {partyDisplayName(activeView.party)}
@@ -355,10 +362,17 @@ export function SplitScreenComparison() {
         </div>
 
         {initialLoading && !activeView ? (
-          <div className="pane projection-pane-active mb-6 bg-bg/90 px-5 py-8 backdrop-blur-sm">
-            <p className="font-mono text-sm text-ink-muted">
+          <div className="pane projection-pane-active mb-6 bg-bg/90 px-5 py-6 backdrop-blur-sm">
+            <p className="mb-4 inline-flex items-center gap-2 font-mono text-sm text-ink-muted">
+              <span className="spinner" aria-hidden />
               Querying ledger as {partyDisplayName(activeOption.party)}…
             </p>
+            <div className="space-y-3">
+              <div className="skeleton h-4 w-44" />
+              <div className="skeleton h-3 w-full" />
+              <div className="skeleton h-3 w-5/6" />
+              <div className="skeleton h-3 w-2/3" />
+            </div>
           </div>
         ) : error ? (
           <div className="pane bg-bg/90 backdrop-blur-sm">
@@ -401,7 +415,12 @@ export function SplitScreenComparison() {
                 ].join(' ')}
               >
                 {activeView ? (
-                  <PartyProjectionBody view={activeView} pledgeRef={pledgeRef} />
+                  <div
+                    key={activeView.party}
+                    className="animate-rise-sm flex flex-1 flex-col"
+                  >
+                    <PartyProjectionBody view={activeView} pledgeRef={pledgeRef} />
+                  </div>
                 ) : (
                   <p className="text-sm text-ink-muted">Waiting for ledger…</p>
                 )}
@@ -415,8 +434,12 @@ export function SplitScreenComparison() {
                 partyId={PARTIES.LENDER_A}
                 visibility="granted"
                 highlighted={viewAs === 'lender_a'}
+                index={0}
               >
-                <p className="mb-4 font-display text-2xl font-semibold tracking-tight text-lime sm:text-3xl">
+                <p
+                  key={viewA?.attestations.length ?? 0}
+                  className="animate-pop mb-4 font-display text-2xl font-semibold tracking-tight text-lime sm:text-3xl"
+                >
                   {(viewA?.attestations.length ?? 0) > 0 ? '1 attestation' : '0 contracts'}
                 </p>
                 {attestationA ? (
@@ -444,8 +467,12 @@ export function SplitScreenComparison() {
                 partyId={PARTIES.LENDER_B}
                 visibility="none"
                 highlighted={viewAs === 'lender_b'}
+                index={1}
               >
-                <p className="mb-4 font-display text-2xl font-semibold tracking-tight text-denied sm:text-3xl">
+                <p
+                  key={contractCountB}
+                  className="animate-pop mb-4 font-display text-2xl font-semibold tracking-tight text-denied sm:text-3xl"
+                >
                   {contractCountB} contracts
                 </p>
                 <div className="flex flex-1 flex-col items-center justify-center border border-white/[0.06] px-4 py-12 text-center sm:px-8 sm:py-16">

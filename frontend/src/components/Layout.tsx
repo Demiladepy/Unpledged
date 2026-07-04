@@ -149,7 +149,9 @@ export function Layout() {
       </header>
 
       <main className="mx-auto w-full max-w-[1680px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-        <Outlet />
+        <div key={pathname} className="animate-fade">
+          <Outlet />
+        </div>
       </main>
 
       <footer className="border-t border-white/10 px-4 py-4 sm:px-8">

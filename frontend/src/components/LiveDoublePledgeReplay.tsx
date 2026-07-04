@@ -133,7 +133,7 @@ export function LiveDoublePledgeReplay({
   const showTerminal = lines.length > 0 || streamedBody.length > 0
 
   return (
-    <section className={['pane', className].filter(Boolean).join(' ')}>
+    <section className={['pane pane-interactive', className].filter(Boolean).join(' ')}>
       <div className="border-b border-white/10 px-4 py-4 sm:px-6">
         <p className="data-label">Live double-pledge replay</p>
         <p className="mt-2 text-sm text-ink-muted">
@@ -176,6 +176,7 @@ export function LiveDoublePledgeReplay({
           onClick={() => void runLiveAttempt()}
           className="btn-lime w-full justify-center sm:w-auto"
         >
+          {attempting || streamingBody ? <span className="spinner" aria-hidden /> : null}
           {attempting
             ? 'Submitting to ledger…'
             : streamingBody
@@ -195,7 +196,10 @@ export function LiveDoublePledgeReplay({
               className="terminal-block max-h-[min(28rem,60vh)] overflow-y-auto"
             >
               {lines.map((line, index) => (
-                <span key={`${line.timestamp}-${index}`} className="block">
+                <span
+                  key={`${line.timestamp}-${index}`}
+                  className="animate-fade block"
+                >
                   <span className="text-ink-dim">{formatTs(line.timestamp)} </span>
                   <span className={lineClass(line.variant)}>{line.text}</span>
                 </span>
@@ -204,7 +208,7 @@ export function LiveDoublePledgeReplay({
                 <span className="block text-negative">{streamedBody}</span>
               ) : null}
               {streamingBody ? (
-                <span className="inline-block h-3 w-2 animate-pulse bg-lime" />
+                <span className="caret-blink ml-0.5 inline-block h-3 w-2 align-middle bg-lime" />
               ) : null}
             </pre>
 

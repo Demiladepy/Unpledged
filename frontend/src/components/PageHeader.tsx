@@ -9,7 +9,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ eyebrow, title, lead, aside }: PageHeaderProps) {
   return (
-    <header className="mb-10 flex flex-wrap items-end justify-between gap-6">
+    <header className="animate-rise mb-10 flex flex-wrap items-end justify-between gap-6">
       <div className="max-w-3xl">
         {eyebrow ? <p className="page-eyebrow">{eyebrow}</p> : null}
         <h2 className="page-title">{title}</h2>

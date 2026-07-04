@@ -74,16 +74,20 @@ export function LedgerHeartbeat() {
 
   return (
     <span
-      className="hidden font-mono text-[10px] tracking-wide text-ink-dim sm:inline"
+      className="hidden items-center gap-1.5 font-mono text-[10px] tracking-wide text-ink-dim sm:inline-flex"
       title="Live ledger-end from Canton DevNet"
     >
+      <span
+        className={[
+          'h-1 w-1 rounded-full',
+          stale ? 'bg-negative' : 'live-dot bg-lime',
+        ].join(' ')}
+        aria-hidden
+      />
       <span className="text-ink-muted">offset</span>{' '}
-      <span className="text-ink-200">{offset.toLocaleString()}</span>
+      <span className="text-ink-200 tabular-nums">{offset.toLocaleString()}</span>
       {syncedAt ? (
-        <>
-          {' '}
-          <span className="text-ink-dim">· {formatAgo(syncedAt)}</span>
-        </>
+        <span className="text-ink-dim">· {formatAgo(syncedAt)}</span>
       ) : null}
     </span>
   )

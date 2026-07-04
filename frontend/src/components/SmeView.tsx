@@ -73,22 +73,34 @@ export function SmeView() {
         <pre className="terminal-block mb-4 text-negative">{error}</pre>
       ) : null}
       {success ? (
-        <p className="mb-4 border border-lime/25 bg-lime/[0.04] px-4 py-3 text-sm text-lime">
+        <p className="animate-rise-sm mb-4 border border-lime/25 bg-lime/[0.04] px-4 py-3 text-sm text-lime">
           {success}
         </p>
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-ink-muted">Loading…</p>
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="pane p-4">
+              <div className="skeleton mb-3 h-4 w-32" />
+              <div className="skeleton mb-2 h-3 w-full" />
+              <div className="skeleton h-3 w-2/3" />
+            </div>
+          ))}
+        </div>
       ) : (
         <>
           <div className="space-y-3 md:hidden">
-            {invoices.map((inv) => {
+            {invoices.map((inv, i) => {
               const req = requests.find((r) => r.invoiceNumber === inv.invoiceNumber)
               const funded = req?.status === 'funded'
               const busy = actingOn === inv.contractId
               return (
-                <article key={inv.contractId} className="pane p-4">
+                <article
+                  key={inv.contractId}
+                  style={{ ['--stagger' as string]: i }}
+                  className="stagger-item pane pane-interactive p-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="data-label">Invoice</p>
@@ -129,6 +141,7 @@ export function SmeView() {
                     onClick={() => void handleRequestFinancing(inv)}
                     className="btn-lime mt-4 w-full justify-center"
                   >
+                    {busy ? <span className="spinner" aria-hidden /> : null}
                     {busy ? 'Submitting…' : 'Request financing'}
                     {!funded && !busy && <IconArrowRight className="h-3.5 w-3.5" />}
                   </button>
@@ -146,14 +159,15 @@ export function SmeView() {
               <span>Status</span>
               <span />
             </div>
-            {invoices.map((inv) => {
+            {invoices.map((inv, i) => {
               const req = requests.find((r) => r.invoiceNumber === inv.invoiceNumber)
               const funded = req?.status === 'funded'
               const busy = actingOn === inv.contractId
               return (
                 <div
                   key={inv.contractId}
-                  className="data-table-row min-w-[720px] grid-cols-[1.2fr_1.5fr_1fr_1fr_0.8fr_auto]"
+                  style={{ ['--stagger' as string]: i }}
+                  className="stagger-item data-table-row min-w-[720px] grid-cols-[1.2fr_1.5fr_1fr_1fr_0.8fr_auto]"
                 >
                   <span className="font-mono text-sm text-ink-100">{inv.invoiceNumber}</span>
                   <span className="font-mono text-xs text-ink-muted" title={inv.contractId}>
@@ -177,7 +191,8 @@ export function SmeView() {
                     onClick={() => void handleRequestFinancing(inv)}
                     className="btn-lime"
                   >
-                    {busy ? '…' : 'Request financing'}
+                    {busy ? <span className="spinner" aria-hidden /> : null}
+                    {busy ? 'Submitting' : 'Request financing'}
                     {!funded && !busy && <IconArrowRight className="h-3.5 w-3.5" />}
                   </button>
                 </div>

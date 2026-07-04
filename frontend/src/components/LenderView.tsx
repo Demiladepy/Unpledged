@@ -66,13 +66,22 @@ export function LenderViewPage() {
         <pre className="terminal-block mb-4 text-negative">{error}</pre>
       ) : null}
       {success ? (
-        <p className="mb-4 border border-lime/25 bg-lime/[0.04] px-4 py-3 text-sm text-lime">
+        <p className="animate-rise-sm mb-4 border border-lime/25 bg-lime/[0.04] px-4 py-3 text-sm text-lime">
           {success}
         </p>
       ) : null}
 
       {loading || !view ? (
-        <p className="text-sm text-ink-muted">Loading…</p>
+        <div className="grid gap-px border border-white/10 bg-white/10 lg:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="space-y-3 bg-bg-pane p-6">
+              <div className="skeleton h-3 w-28" />
+              <div className="skeleton h-5 w-40" />
+              <div className="skeleton h-3 w-full" />
+              <div className="skeleton h-3 w-3/4" />
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="grid gap-px border border-white/10 bg-white/10 lg:grid-cols-2">
           <section className="bg-bg-pane">
@@ -90,12 +99,13 @@ export function LenderViewPage() {
                 .
               </p>
             ) : (
-              view.pendingOffers.map((offer) => {
+              view.pendingOffers.map((offer, i) => {
                 const busy = fundingCid === offer.contractId
                 return (
                   <div
                     key={offer.contractId}
-                    className="border-b border-white/[0.06] px-6 py-5 last:border-b-0"
+                    style={{ ['--stagger' as string]: i }}
+                    className="stagger-item border-b border-white/[0.06] px-6 py-5 last:border-b-0"
                   >
                     <CopyableId value={offer.contractId} label="Offer CID" />
                     <p className="mt-4 text-xs text-ink-muted">Advance</p>
@@ -108,6 +118,7 @@ export function LenderViewPage() {
                       onClick={() => void handleFund(offer)}
                       className="btn-lime mt-5"
                     >
+                      {busy ? <span className="spinner" aria-hidden /> : null}
                       {busy ? 'Committing…' : 'Fund'}
                     </button>
                   </div>
