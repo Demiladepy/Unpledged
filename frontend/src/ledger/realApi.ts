@@ -25,7 +25,7 @@ import type {
   DemoStep5Result,
 } from '../types/demoFlow'
 import { ledgerClient, newCommandId } from './client'
-import { getAccessToken } from './auth'
+import { getAccessToken, invalidateAccessToken } from './auth'
 import { ledgerConfig } from './config'
 import { PARTIES } from './parties'
 import type {
@@ -756,17 +756,27 @@ export async function realGetLenderFinancingTree(
   updateId: string = ledgerConfig.completeFinancingUpdateId,
   party: Party = PARTIES.LENDER_A,
 ): Promise<LenderTransactionTreeSummary> {
-  const token = await getAccessToken()
   const params = new URLSearchParams()
   params.append('parties', party)
   const url = `${ledgerConfig.baseUrl.replace(/\/$/, '')}/v2/updates/transaction-tree-by-id/${encodeURIComponent(updateId)}?${params}`
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-    },
-  })
+  async function fetchTree(token: string): Promise<Response> {
+    return fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    })
+  }
+
+  let token = await getAccessToken()
+  let res = await fetchTree(token)
+  if (res.status === 401) {
+    invalidateAccessToken()
+    token = await getAccessToken()
+    res = await fetchTree(token)
+  }
+
   const text = await res.text()
   if (!res.ok) {
     throw new Error(`transaction-tree-by-id failed (${res.status}): ${text.slice(0, 400)}`)

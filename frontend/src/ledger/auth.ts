@@ -85,22 +85,33 @@ export interface SmokeTestResult {
  * Browser smoke test: GET /v2/state/ledger-end with a live token.
  * Call from /smoke route while `npm run dev` is running.
  */
+async function fetchLedgerEndOnce(token: string): Promise<Response> {
+  const url = `${ledgerConfig.baseUrl.replace(/\/$/, '')}/v2/state/ledger-end`
+  return fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+  })
+}
+
+/**
+ * Browser smoke test: GET /v2/state/ledger-end with a live token.
+ * Retries once on 401 after invalidating the cached token.
+ */
 export async function smokeTestLedgerEnd(): Promise<SmokeTestResult> {
   try {
-    const token = await getAccessToken()
-    const url = `${ledgerConfig.baseUrl.replace(/\/$/, '')}/v2/state/ledger-end`
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-    })
+    let token = await getAccessToken()
+    let response = await fetchLedgerEndOnce(token)
+
+    if (response.status === 401) {
+      invalidateAccessToken()
+      token = await getAccessToken()
+      response = await fetchLedgerEndOnce(token)
+    }
 
     const text = await response.text()
     if (!response.ok) {
-      if (response.status === 401) {
-        invalidateAccessToken()
-      }
       return {
         ok: false,
         status: response.status,

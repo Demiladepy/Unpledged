@@ -8,6 +8,7 @@ import type {
   TransactionTreeNode,
 } from '../types/ledger'
 import { CopyableId } from './CopyableId'
+import { LedgerCallError } from './LedgerCallError'
 
 function formatNodeLabel(node: TransactionTreeNode): string {
   if (node.kind === 'Exercised' && node.choice) {
@@ -115,7 +116,10 @@ export function TransactionTreeInspector({
             </div>
           </div>
         ) : error ? (
-          <pre className="terminal-block text-negative">{error}</pre>
+          <LedgerCallError
+            error={error}
+            onRetry={() => void loadTree(true)}
+          />
         ) : tree ? (
           <>
             <CopyableId value={tree.updateId} label="CompleteFinancing update ID" />

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 
 import {
   demoStep1CreateInvoice,
@@ -11,6 +12,7 @@ import {
 import { ledgerConfig } from '../ledger/config'
 import type { DemoFlowSession, DemoLedgerCommandResult } from '../types/demoFlow'
 import { CopyableId } from './CopyableId'
+import { LedgerCallError } from './LedgerCallError'
 import { LiveBadge } from './LiveBadge'
 import { PageHeader } from './PageHeader'
 
@@ -59,6 +61,8 @@ interface StepPanelProps {
   description: string
   status: StepStatus
   disabled: boolean
+  runningLabel?: string
+  idleLabel?: string
   onRun: () => void
   children?: ReactNode
 }
@@ -69,16 +73,20 @@ function StepPanel({
   description,
   status,
   disabled,
+  runningLabel = 'Submitting to ledger…',
+  idleLabel,
   onRun,
   children,
 }: StepPanelProps) {
   const active = status === 'running' || status === 'done'
+  const canRun = !disabled && status !== 'running'
   return (
     <section
       style={{ ['--stagger' as string]: step - 1 }}
       className={[
         'stagger-item pane pane-interactive transition-colors duration-300',
         active ? 'projection-pane-active' : '',
+        status === 'error' ? 'border-negative/30' : '',
       ].join(' ')}
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-6">
@@ -110,24 +118,28 @@ function StepPanel({
             : status === 'done'
               ? 'Complete'
               : status === 'error'
-                ? 'Failed'
+                ? 'Failed — retry'
                 : 'Pending'}
         </span>
       </div>
       <div className="px-4 py-4 sm:px-6 sm:py-5">
         <button
           type="button"
-          disabled={disabled || status === 'running'}
+          disabled={!canRun}
           onClick={() => void onRun()}
           className="btn-lime w-full justify-center sm:w-auto"
         >
           {status === 'running' ? (
             <>
               <span className="spinner" aria-hidden />
-              Querying ledger…
+              {runningLabel}
             </>
+          ) : status === 'error' ? (
+            `Retry step ${step}`
+          ) : status === 'done' ? (
+            `Re-run step ${step}`
           ) : (
-            `Run step ${step}`
+            idleLabel ?? `Run step ${step}`
           )}
         </button>
         {children}
@@ -136,17 +148,16 @@ function StepPanel({
   )
 }
 
+function emptyStatuses(): StepStatus[] {
+  return ['pending', 'pending', 'pending', 'pending', 'pending']
+}
+
 export function LiveDemoFlowPage() {
-  const [invoiceNumber] = useState(() => newDemoInvoiceNumber())
+  const [invoiceNumber, setInvoiceNumber] = useState(() => newDemoInvoiceNumber())
   const [session, setSession] = useState<DemoFlowSession>({ invoiceNumber })
-  const [statuses, setStatuses] = useState<StepStatus[]>([
-    'pending',
-    'pending',
-    'pending',
-    'pending',
-    'pending',
-  ])
+  const [statuses, setStatuses] = useState<StepStatus[]>(emptyStatuses)
   const [stepError, setStepError] = useState<string | null>(null)
+  const [failedStep, setFailedStep] = useState<number | null>(null)
 
   const [step1Result, setStep1Result] = useState<DemoLedgerCommandResult | null>(null)
   const [step2Result, setStep2Result] = useState<DemoLedgerCommandResult | null>(null)
@@ -165,8 +176,24 @@ export function LiveDemoFlowPage() {
     })
   }
 
+  function startFreshRun() {
+    const next = newDemoInvoiceNumber()
+    setInvoiceNumber(next)
+    setSession({ invoiceNumber: next })
+    setStatuses(emptyStatuses())
+    setStepError(null)
+    setFailedStep(null)
+    setStep1Result(null)
+    setStep2Result(null)
+    setStep2Privacy(null)
+    setStep3Result(null)
+    setStep4Result(null)
+    setStep5Result(null)
+  }
+
   async function runStep1() {
     setStepError(null)
+    setFailedStep(null)
     setStatus(0, 'running')
     try {
       const out = await demoStep1CreateInvoice(invoiceNumber)
@@ -178,6 +205,7 @@ export function LiveDemoFlowPage() {
       setStatus(0, 'done')
     } catch (err) {
       setStepError(err instanceof Error ? err.message : String(err))
+      setFailedStep(1)
       setStatus(0, 'error')
     }
   }
@@ -185,6 +213,7 @@ export function LiveDemoFlowPage() {
   async function runStep2() {
     if (!session.invoiceCid) return
     setStepError(null)
+    setFailedStep(null)
     setStatus(1, 'running')
     try {
       const out = await demoStep2Attestation(session.invoiceCid)
@@ -199,6 +228,7 @@ export function LiveDemoFlowPage() {
       setStatus(1, 'done')
     } catch (err) {
       setStepError(err instanceof Error ? err.message : String(err))
+      setFailedStep(2)
       setStatus(1, 'error')
     }
   }
@@ -206,6 +236,7 @@ export function LiveDemoFlowPage() {
   async function runStep3() {
     if (!session.attestationCid) return
     setStepError(null)
+    setFailedStep(null)
     setStatus(2, 'running')
     try {
       const out = await demoStep3Offer(session.attestationCid)
@@ -214,6 +245,7 @@ export function LiveDemoFlowPage() {
       setStatus(2, 'done')
     } catch (err) {
       setStepError(err instanceof Error ? err.message : String(err))
+      setFailedStep(3)
       setStatus(2, 'error')
     }
   }
@@ -221,6 +253,7 @@ export function LiveDemoFlowPage() {
   async function runStep4() {
     if (!session.invoiceCid || !session.offerCid) return
     setStepError(null)
+    setFailedStep(null)
     setStatus(3, 'running')
     try {
       const out = await demoStep4Finance(session.invoiceCid, session.offerCid)
@@ -233,6 +266,7 @@ export function LiveDemoFlowPage() {
       setStatus(3, 'done')
     } catch (err) {
       setStepError(err instanceof Error ? err.message : String(err))
+      setFailedStep(4)
       setStatus(3, 'error')
     }
   }
@@ -240,6 +274,7 @@ export function LiveDemoFlowPage() {
   async function runStep5() {
     if (!session.invoiceCid || !session.attestationCid) return
     setStepError(null)
+    setFailedStep(null)
     setStatus(4, 'running')
     try {
       const out = await demoStep5DoublePledge(session.invoiceCid, session.attestationCid)
@@ -247,9 +282,11 @@ export function LiveDemoFlowPage() {
       setStatus(4, out.blocked ? 'done' : 'error')
       if (!out.blocked) {
         setStepError('Expected ledger rejection — double pledge was not blocked')
+        setFailedStep(5)
       }
     } catch (err) {
       setStepError(err instanceof Error ? err.message : String(err))
+      setFailedStep(5)
       setStatus(4, 'error')
     }
   }
@@ -258,6 +295,15 @@ export function LiveDemoFlowPage() {
   const step2Done = statuses[1] === 'done'
   const step3Done = statuses[2] === 'done'
   const step4Done = statuses[3] === 'done'
+  const allDone = statuses.every((s) => s === 'done')
+
+  const retryFailed = () => {
+    if (failedStep === 1) void runStep1()
+    else if (failedStep === 2) void runStep2()
+    else if (failedStep === 3) void runStep3()
+    else if (failedStep === 4) void runStep4()
+    else if (failedStep === 5) void runStep5()
+  }
 
   return (
     <div>
@@ -269,18 +315,34 @@ export function LiveDemoFlowPage() {
       />
 
       {ledgerConfig.useMocks ? (
-        <p className="mb-6 border border-white/10 bg-bg-pane px-4 py-3 text-sm text-ink-muted">
-          Mock mode — set <code className="font-mono">VITE_USE_MOCKS=false</code> for live
-          DevNet writes.
-        </p>
+        <div className="mb-6">
+          <LedgerCallError
+            error="Mock mode is on — live financing writes are disabled."
+          />
+          <p className="mt-3 text-sm text-ink-muted">
+            Set <code className="font-mono text-ink-300">VITE_USE_MOCKS=false</code> and
+            redeploy so judges see real Canton DevNet commands.
+          </p>
+        </div>
       ) : null}
 
       <div className="pane mb-8 px-4 py-4 sm:px-6">
-        <p className="data-label">Session invoice</p>
-        <p className="mt-2 font-mono text-lg text-lime">{invoiceNumber}</p>
-        <p className="mt-2 text-xs text-ink-muted">
-          Fresh identifier — never pre-pledged on DevNet
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="data-label">Session invoice</p>
+            <p className="mt-2 font-mono text-lg text-lime">{invoiceNumber}</p>
+            <p className="mt-2 text-xs text-ink-muted">
+              Fresh identifier — never pre-pledged on DevNet
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={startFreshRun}
+            className="border border-white/10 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-ink-muted transition-colors hover:border-white/20 hover:text-lime"
+          >
+            Start fresh run
+          </button>
+        </div>
         {session.invoiceCid ? (
           <div className="mt-4">
             <CopyableId value={session.invoiceCid} label="Invoice CID" />
@@ -288,13 +350,35 @@ export function LiveDemoFlowPage() {
         ) : null}
       </div>
 
+      {allDone ? (
+        <div className="animate-rise-sm mb-8 border border-lime/30 bg-lime/[0.04] px-4 py-5 sm:px-6">
+          <p className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-lime">
+            Full cycle complete on this invoice
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+            Created → attested → financed → second pledge blocked — all live on Canton
+            DevNet. Compare party views on{' '}
+            <Link to="/" className="text-lime underline decoration-lime/30 underline-offset-2">
+              Privacy
+            </Link>
+            .
+          </p>
+          {session.financingUpdateId ? (
+            <div className="mt-4">
+              <CopyableId value={session.financingUpdateId} label="Financing updateId" />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="space-y-6">
         <StepPanel
           step={1}
-          title="SME creates invoice"
-          description="POST submit-and-wait · CreateCommand Invoice · actAs [SME, Debtor]"
+          title="SME creates a fresh invoice"
+          description="On-ledger Create Invoice · actAs SME + Debtor · unique invoiceNumber"
           status={statuses[0]}
           disabled={false}
+          idleLabel="Create invoice on DevNet"
           onRun={runStep1}
         >
           {step1Result ? <CommandTerminal result={step1Result} /> : null}
@@ -302,10 +386,11 @@ export function LiveDemoFlowPage() {
 
         <StepPanel
           step={2}
-          title="SME proves unpledged (Lender A)"
-          description="CreateAndExercise ProveUnpledged · summary attestation · privacy check via getLenderView"
+          title="SME proves unpledged for Lender A"
+          description="ProveUnpledged attestation · then live ACS check: Lender A sees it, Lender B does not"
           status={statuses[1]}
           disabled={!step1Done}
+          idleLabel="Generate attestation"
           onRun={runStep2}
         >
           {session.settledCount !== undefined ? (
@@ -321,6 +406,7 @@ export function LiveDemoFlowPage() {
           ) : null}
           {step2Privacy ? (
             <div className="mt-4 border border-white/[0.06] px-4 py-3 font-mono text-xs">
+              <p className="data-label mb-3">Live privacy check (ACS)</p>
               <p className={step2Privacy.lenderASeesAttestation ? 'text-lime' : 'text-negative'}>
                 Lender A sees this attestation:{' '}
                 {step2Privacy.lenderASeesAttestation ? 'YES' : 'NO'}
@@ -337,6 +423,16 @@ export function LiveDemoFlowPage() {
                 Lender A invoices in ACS: {step2Privacy.lenderAInvoiceCount} · Lender B
                 attestations: {step2Privacy.lenderBAttestationCount}
               </p>
+              <p className="mt-3 text-ink-muted">
+                Or confirm interactively on{' '}
+                <Link
+                  to="/"
+                  className="text-ink-200 underline decoration-white/20 underline-offset-2 hover:text-lime"
+                >
+                  Privacy → View as
+                </Link>
+                .
+              </p>
             </div>
           ) : null}
           {step2Result ? <CommandTerminal result={step2Result} /> : null}
@@ -344,10 +440,11 @@ export function LiveDemoFlowPage() {
 
         <StepPanel
           step={3}
-          title="Lender A creates FinancingOffer"
-          description="CreateCommand FinancingOffer · advance 900.00 · actAs Lender A"
+          title="Lender A creates a financing offer"
+          description="FinancingOffer · advance 900.00 · Lender A only"
           status={statuses[2]}
           disabled={!step2Done}
+          idleLabel="Create financing offer"
           onRun={runStep3}
         >
           {session.offerCid ? (
@@ -361,9 +458,10 @@ export function LiveDemoFlowPage() {
         <StepPanel
           step={4}
           title="SME completes financing"
-          description="CompleteFinancing via FinancingCoordinator · PledgeMarker created · funding succeeded"
+          description="CompleteFinancing → PledgeMarker · funding succeeds on this fresh invoice"
           status={statuses[3]}
           disabled={!step3Done}
+          idleLabel="Complete financing"
           onRun={runStep4}
         >
           {session.pledgeMarkerCid ? (
@@ -379,10 +477,11 @@ export function LiveDemoFlowPage() {
 
         <StepPanel
           step={5}
-          title="Second pledge attempt (expect rejection)"
-          description="Same invoice · second CompleteFinancing · ledger must return HTTP 400"
+          title="Second pledge on the same invoice"
+          description="Same invoice · expect live HTTP 400 from Canton — fraud blocked"
           status={statuses[4]}
           disabled={!step4Done}
+          idleLabel="Attempt second pledge"
           onRun={runStep5}
         >
           {step5Result ? (
@@ -403,7 +502,9 @@ export function LiveDemoFlowPage() {
       </div>
 
       {stepError ? (
-        <pre className="terminal-block mt-6 text-negative">{stepError}</pre>
+        <div className="mt-6">
+          <LedgerCallError error={stepError} onRetry={retryFailed} />
+        </div>
       ) : null}
     </div>
   )

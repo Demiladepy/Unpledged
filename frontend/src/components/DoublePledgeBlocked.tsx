@@ -3,6 +3,7 @@ import { getDoublePledgeAttempt } from '../ledger/api'
 import { PARTIES } from '../ledger/parties'
 import type { DoublePledgeAttempt } from '../types/ledger'
 import { CopyableId } from './CopyableId'
+import { LedgerCallError } from './LedgerCallError'
 import { LiveDoublePledgeReplay } from './LiveDoublePledgeReplay'
 import { PageHeader } from './PageHeader'
 import { TransactionTreeInspector } from './TransactionTreeInspector'
@@ -49,6 +50,23 @@ export function DoublePledgeBlocked() {
           <span className="spinner" aria-hidden />
           Loading…
         </p>
+      ) : error && !attempt ? (
+        <LedgerCallError
+          error={error}
+          onRetry={() => {
+            setError(null)
+            setLoading(true)
+            void getDoublePledgeAttempt()
+              .then((data) => {
+                setAttempt(data)
+                setLoading(false)
+              })
+              .catch((err: unknown) => {
+                setError(err instanceof Error ? err.message : String(err))
+                setLoading(false)
+              })
+          }}
+        />
       ) : (
         <>
           {attempt ? (
@@ -111,8 +129,10 @@ export function DoublePledgeBlocked() {
             </ul>
           </section>
 
-          {error ? (
-            <pre className="terminal-block mt-4 text-negative">{error}</pre>
+          {error && attempt ? (
+            <div className="mt-4">
+              <LedgerCallError error={error} />
+            </div>
           ) : null}
         </>
       )}

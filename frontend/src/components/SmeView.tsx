@@ -8,6 +8,7 @@ import { PARTIES, partyDisplayName } from '../ledger/parties'
 import type { FinancingRequest, Invoice } from '../types/ledger'
 import { CopyableId } from './CopyableId'
 import { IconArrowRight } from './icons'
+import { LedgerCallError } from './LedgerCallError'
 import { PageHeader } from './PageHeader'
 
 function formatCurrency(amount: number): string {
@@ -37,7 +38,10 @@ export function SmeView() {
   }, [])
 
   useEffect(() => {
-    void reload()
+    void reload().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : String(err))
+      setLoading(false)
+    })
   }, [reload])
 
   async function handleRequestFinancing(invoice: Invoice) {
@@ -70,7 +74,17 @@ export function SmeView() {
       </div>
 
       {error ? (
-        <pre className="terminal-block mb-4 text-negative">{error}</pre>
+        <div className="mb-4">
+          <LedgerCallError
+            error={error}
+            onRetry={() => {
+              setError(null)
+              void reload().catch((err: unknown) => {
+                setError(err instanceof Error ? err.message : String(err))
+              })
+            }}
+          />
+        </div>
       ) : null}
       {success ? (
         <p className="animate-rise-sm mb-4 border border-lime/25 bg-lime/[0.04] px-4 py-3 text-sm text-lime">

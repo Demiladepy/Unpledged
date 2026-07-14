@@ -6,6 +6,7 @@ import type {
   LiveDoublePledgeLogLine,
   LiveDoublePledgeResult,
 } from '../types/ledger'
+import { LedgerCallError } from './LedgerCallError'
 
 function formatTs(iso: string): string {
   try {
@@ -238,7 +239,12 @@ export function LiveDoublePledgeReplay({
         ) : null}
 
         {error ? (
-          <pre className="terminal-block mt-4 text-negative">{error}</pre>
+          <div className="mt-4">
+            <LedgerCallError
+              error={error}
+              onRetry={() => void runLiveAttempt()}
+            />
+          </div>
         ) : null}
       </div>
     </section>

@@ -4,6 +4,7 @@ import { getLenderView, listPledgeMarkers } from '../ledger/api'
 import { PARTIES, partyDisplayName } from '../ledger/parties'
 import type { LenderView, UnpledgedAttestation } from '../types/ledger'
 import { CopyableId } from './CopyableId'
+import { LedgerCallError } from './LedgerCallError'
 import { LiveBadge } from './LiveBadge'
 import { LiveDoublePledgeReplay } from './LiveDoublePledgeReplay'
 import { TransactionTreeInspector } from './TransactionTreeInspector'
@@ -30,8 +31,8 @@ function formatFetchError(message: string): string {
     return [
       "Couldn't reach the ledger API from the browser.",
       '',
-      'Ensure npm run dev is running and reload this page.',
-      'Ledger calls are proxied via /api/ledger to avoid CORS.',
+      'On Vercel: confirm Root Directory is frontend and CANTON_* secrets are set.',
+      'Locally: ensure npm run dev is running and reload this page.',
     ].join('\n')
   }
   return message
@@ -375,14 +376,31 @@ export function SplitScreenComparison() {
             </div>
           </div>
         ) : error ? (
-          <div className="pane bg-bg/90 backdrop-blur-sm">
-            <div className="border-b border-white/10 px-5 py-3 sm:px-6">
-              <p className="text-xs font-medium uppercase tracking-[0.12em] text-negative">
-                Ledger connection failed
-              </p>
-            </div>
-            <pre className="terminal-block">{formatFetchError(error)}</pre>
-          </div>
+          <LedgerCallError
+            className="mb-6 bg-bg/90 backdrop-blur-sm"
+            error={formatFetchError(error)}
+            onRetry={() => {
+              setError(null)
+              setInitialLoading(true)
+              void (async () => {
+                try {
+                  const [a, b, markers] = await Promise.all([
+                    getLenderView(PARTIES.LENDER_A),
+                    getLenderView(PARTIES.LENDER_B),
+                    listPledgeMarkers(PARTIES.LENDER_A),
+                  ])
+                  setViewA(a)
+                  setViewB(b)
+                  setPledgeRef(markers[0]?.invoiceRef ?? '')
+                  setActiveView(await queryAsParty(activeOption.party))
+                  setInitialLoading(false)
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : String(err))
+                  setInitialLoading(false)
+                }
+              })()
+            }}
+          />
         ) : (
           <>
             <section className="pane projection-pane-active mb-8 flex min-h-[320px] flex-col sm:min-h-[380px]">
