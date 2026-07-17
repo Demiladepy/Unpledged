@@ -86,6 +86,18 @@ export function humanizeLedgerError(error: unknown): {
     }
   }
 
+  if (
+    lower.includes('not_found') ||
+    lower.includes('the page could not be found') ||
+    (lower.includes('404') && lower.includes('ncpt'))
+  ) {
+    return {
+      title: 'API proxy not found on host',
+      detail: raw,
+      hint: 'Vercel did not hit the ledger proxy (common with nested /api/ledger/... routes). Redeploy after the ledger-proxy rewrite fix. Confirm Root Directory is frontend.',
+    }
+  }
+
   if (lower.includes('not found') || lower.includes('404')) {
     return {
       title: 'Ledger resource not found',

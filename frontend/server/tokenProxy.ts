@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 /**
  * Server-side OAuth2 client_credentials exchange.
  * NEVER import this from browser code — client_secret stays here only.

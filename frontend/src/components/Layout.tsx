@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ledgerConfig } from '../ledger/config'
 import { PARTIES, partyDisplayName } from '../ledger/parties'
 import { CopyableId } from './CopyableId'
@@ -44,14 +44,23 @@ export function Layout() {
       <header className="sticky top-0 z-30 border-b border-white/10 bg-bg/95 backdrop-blur-sm">
         <div className="mx-auto max-w-[1680px] px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
           <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-display text-base font-semibold tracking-tight text-ink-100 sm:text-lg">
-                Unpledged
-              </p>
-              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
-                Canton Network
-              </p>
-            </div>
+            <Link to="/" className="flex min-w-0 items-center gap-3">
+              <img
+                src="/logo.png"
+                alt=""
+                width={36}
+                height={36}
+                className="h-9 w-9 shrink-0 object-contain"
+              />
+              <div className="min-w-0">
+                <p className="font-display text-base font-semibold tracking-tight text-ink-100 sm:text-lg">
+                  Unpledged
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+                  Canton Network
+                </p>
+              </div>
+            </Link>
 
             <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
               <LedgerHeartbeat />
