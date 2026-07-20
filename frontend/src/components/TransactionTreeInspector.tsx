@@ -171,6 +171,10 @@ export function TransactionTreeInspector({
                 PreparePledge runs under SME-only informees — absent from{' '}
                 {partyLabel}&apos;s projection.
               </p>
+              <p className="mt-4 border-t border-white/[0.06] pt-4 font-display text-base font-semibold tracking-tight text-ink-100 sm:text-lg">
+                The privacy isn&apos;t in the interface.{' '}
+                <span className="text-lime">It&apos;s in the commit model.</span>
+              </p>
             </div>
 
             <div className="mt-6">

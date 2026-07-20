@@ -16,6 +16,28 @@ function formatTs(iso: string): string {
   }
 }
 
+/** Short lime-friendly excerpt from the ledger refusal — not a raw JSON dump. */
+function extractPledgeRefusalExcerpt(
+  verbatimBody: string,
+  reason: string | undefined,
+): string {
+  const causeMatch = verbatimBody.match(/"cause"\s*:\s*"([^"]+)"/)
+  const cause = causeMatch?.[1]
+  if (cause?.includes('Invoice already pledged')) {
+    return 'DAML_FAILURE · AssertionFailed · Invoice already pledged'
+  }
+  if (reason?.includes('Invoice already pledged') || reason?.includes('already pledged')) {
+    return `DAML_FAILURE · ${reason}`
+  }
+  if (cause) {
+    return cause.length > 160 ? `${cause.slice(0, 157)}…` : cause
+  }
+  if (reason) {
+    return reason.length > 160 ? `${reason.slice(0, 157)}…` : reason
+  }
+  return 'Ledger refused CompleteFinancing (double pledge blocked)'
+}
+
 function lineClass(variant: LiveDoublePledgeLogLine['variant']): string {
   switch (variant) {
     case 'lime':
@@ -104,19 +126,38 @@ export function LiveDoublePledgeReplay({
       setResult(live)
       await refreshMarkerCount()
 
-      setStreamingBody(true)
-      setLines((prev) => [
-        ...prev,
-        {
-          timestamp: new Date().toISOString(),
-          text: '─── verbatim HTTP response body ───',
-          variant: 'error',
-        },
-      ])
-      await streamText(live.verbatimBody, (chunk) => {
-        setStreamedBody((prev) => prev + chunk)
-      })
-      setStreamingBody(false)
+      // Only stream the raw body for unexpected outcomes; expected refusal
+      // gets a short proof excerpt so the demo doesn't look like a crash.
+      if (live.blocked) {
+        const excerpt = extractPledgeRefusalExcerpt(live.verbatimBody, live.reason)
+        setLines((prev) => [
+          ...prev,
+          {
+            timestamp: new Date().toISOString(),
+            text: '─── ledger refusal (proof) ───',
+            variant: 'lime',
+          },
+          {
+            timestamp: new Date().toISOString(),
+            text: excerpt,
+            variant: 'success',
+          },
+        ])
+      } else {
+        setStreamingBody(true)
+        setLines((prev) => [
+          ...prev,
+          {
+            timestamp: new Date().toISOString(),
+            text: '─── verbatim HTTP response body ───',
+            variant: 'error',
+          },
+        ])
+        await streamText(live.verbatimBody, (chunk) => {
+          setStreamedBody((prev) => prev + chunk)
+        })
+        setStreamingBody(false)
+      }
 
       if (countBefore !== null && live.pledgeMarkerCountAfter !== countBefore) {
         setError(
@@ -185,12 +226,46 @@ export function LiveDoublePledgeReplay({
               : 'Attempt second pledge (live)'}
         </button>
 
+        {result?.blocked ? (
+          <div className="mt-5 border border-lime/30 bg-lime/[0.04] px-4 py-4 sm:px-5">
+            <p className="font-display text-xs font-semibold uppercase tracking-[0.14em] text-lime">
+              Fraud prevented on-chain
+            </p>
+            <p className="mt-2 font-display text-base font-semibold tracking-tight text-ink-100 sm:text-lg">
+              Ledger refused · Invoice already pledged
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+              HTTP {result.httpStatus} from Canton DevNet —{' '}
+              <span className="text-ink-200">PledgeRegistry:RecordPledge</span> asserted
+              failure. PledgeMarker count unchanged (
+              {result.pledgeMarkerCountBefore} → {result.pledgeMarkerCountAfter}). This is
+              the expected outcome, not an app error.
+            </p>
+          </div>
+        ) : null}
+
+        {result && !result.blocked ? (
+          <div className="mt-5 border border-negative/30 bg-negative/[0.04] px-4 py-4 sm:px-5">
+            <p className="font-display text-xs font-semibold uppercase tracking-[0.14em] text-negative">
+              Unexpected success
+            </p>
+            <p className="mt-2 text-sm text-ink-muted">
+              Second pledge was accepted — double-pledge gate did not fire. Check
+              PledgeRegistry / INV-001 state.
+            </p>
+          </div>
+        ) : null}
+
         {showTerminal ? (
           <div className="mt-5">
             <p className="data-label mb-2">
               Ledger session
               {result?.httpStatus ? ` · HTTP ${result.httpStatus}` : ''}
-              {result?.blocked ? ' · REJECTED' : ''}
+              {result?.blocked
+                ? ' · BLOCKED (expected)'
+                : result
+                  ? ' · UNEXPECTED'
+                  : ''}
             </p>
             <pre
               ref={terminalRef}

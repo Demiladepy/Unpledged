@@ -704,7 +704,17 @@ export async function realAttemptDoublePledgeLive(
   const verbatimBody = formatVerbatimBody(dup.body)
   const { correlationId, traceId, reason } = parseLedgerErrorIds(dup.body)
 
-  logProgress(onProgress, `HTTP ${dup.status}`, dup.ok ? 'error' : 'error')
+  // Expected path is rejection (HTTP 400) — log as success, not error.
+  logProgress(
+    onProgress,
+    dup.ok
+      ? `HTTP ${dup.status} — UNEXPECTED (second pledge should fail)`
+      : `HTTP ${dup.status} — ledger refused (expected)`,
+    dup.ok ? 'error' : 'lime',
+  )
+  if (!dup.ok && reason) {
+    logProgress(onProgress, `  cause: ${reason}`, 'success')
+  }
   if (correlationId) {
     logProgress(onProgress, `correlationId: ${correlationId}`, 'muted')
   }
@@ -741,7 +751,7 @@ export async function realAttemptDoublePledgeLive(
   return {
     blocked: true,
     httpStatus: dup.status,
-    reason,
+    reason: reason || 'Invoice already pledged',
     verbatimBody,
     correlationId,
     traceId,

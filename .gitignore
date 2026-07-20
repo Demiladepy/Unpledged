@@ -7,3 +7,4 @@ frontend/.env.server
 
 # Root tooling (Canton MCP for Cursor)
 node_modules/
+.vercel
