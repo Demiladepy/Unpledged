@@ -1,66 +1,68 @@
-# Unpledged — codebase audit
+# Unpledged — Full audit report
 
-**Date:** June 2026 · **Network:** Canton DevNet (Five North) · **Package:** `3a6372bf939532634aa41b2abf1e3ae1f26960bf21c4cc4549cea9a2c9dc236d`
-
-## Executive summary
-
-The project is **demo-ready on live DevNet**. Core privacy, financing, and double-pledge proofs are implemented on-ledger and surfaced in the UI. This audit documents what is complete, what was wired in the latest pass, and remaining limitations.
+**Date:** 20 July 2026  
+**Network:** Canton DevNet (Five North)  
+**Package:** `3a6372bf939532634aa41b2abf1e3ae1f26960bf21c4cc4549cea9a2c9dc236d` (unpledged-0.0.1, LF 2.1, SDK 3.4.11)  
+**Live:** https://unpledged.vercel.app  
 
 ---
 
-## 1. Daml / on-ledger
+## Executive summary
 
-| Template / flow | Status | Evidence |
-|-----------------|--------|----------|
-| `Invoice` + `PreparePledge` | Live | `create:invoice`, SME stakeholder only on prepare |
-| `UnpledgedAttestation` | Live | `create:attestation`, summary fields only |
-| `FinancingCoordinator.CompleteFinancing` | Live | `create:financing` Part A |
-| `PledgeMarker` | Live | Lender A ACS after financing |
-| `PledgeRegistry` duplicate block | Live | Part B + `attemptDoublePledgeLive` |
-| Lender A tx-tree privacy | Live | `verify:tree` — 0 Invoice nodes in projection |
-| `daml/Test.daml` | Present | Script-level privacy + double-pledge tests |
+| Area | Status | Notes |
+|------|--------|-------|
+| Daml contracts | ✅ Complete | Privacy + encumbrance + double-pledge assert |
+| Live DevNet UI | ✅ Demo-ready | All core routes wired to `realApi` |
+| Double-pledge UX | ✅ Fixed (Jul 2026) | HTTP 400 shown as **Fraud prevented**, not crash |
+| Transaction tree | ✅ Verified | Invoice nodes = 0 in Lender A projection |
+| Vercel proxy | ✅ Fixed | `ledger-proxy` + rewrite (not broken catch-all) |
+| README / docs | ✅ Overhauled | Research citations, Excalidraw, demo guides |
+| Last automated verify | ⚠️ Intermittent | DevNet auth timeout at audit time — re-run when online |
 
-**Privacy model:** Lender is never an `Invoice` stakeholder. `PreparePledge` runs under SME-only informees and is absent from Lender A's transaction-tree projection.
+**Verdict:** Submission-ready. Re-run `grant:act-as` + `verify:all` before any live session.
+
+---
+
+## 1. On-ledger (Daml)
+
+| Flow | Status | Evidence |
+|------|--------|----------|
+| `Invoice` create | ✅ | `create:invoice`, SME + Debtor signatories |
+| `ProveUnpledged` | ✅ | Summary attestation; lender observer only |
+| `PreparePledge` | ✅ | SME-only; absent from lender tree projection |
+| `CompleteFinancing` | ✅ | Orchestrates offer + pledge path |
+| `RecordPledge` / `PledgeMarker` | ✅ | Encumbrance on canonical `invoiceRef` |
+| Double-pledge block | ✅ | `assertMsg "Invoice already pledged"` |
+| `daml/Test.daml` | ✅ | Script tests for privacy + duplicate pledge |
+
+**Privacy invariant:** Lender is never an `Invoice` stakeholder. `PreparePledge` informees exclude lenders.
 
 ---
 
 ## 2. Frontend routes
 
-| Route | Component | Ledger calls | Demo role |
-|-------|-----------|--------------|-----------|
-| `/` | `SplitScreenComparison` | `getLenderView` ×2, `listPledgeMarkers` | Privacy proof |
-| `/` | `LiveDoublePledgeReplay` | `attemptDoublePledgeLive`, `listPledgeMarkers` | Live fraud rejection |
-| `/` | `TransactionTreeInspector` | `getLenderFinancingTree` | Commit-model privacy |
-| `/sme` | `SmeView` | `listInvoices`, `listFinancingRequests`, **`requestFinancing`** | SME workflow |
-| `/lender` | `LenderViewPage` | `getLenderView`, `getAttestation`, **`fundFinancingOffer`** | Lender workflow |
-| `/blocked` | `DoublePledgeBlocked` | Replay + tree + Lighthouse | Deep-dive page |
-| `/smoke` | `SmokeTestPage` | `smokeTestLedgerEnd` | Diagnostics |
+| Route | Component | Live ledger | Demo video |
+|-------|-----------|-------------|------------|
+| `/` | `SplitScreenComparison` | ACS ×2, replay, tree | **Required** — privacy |
+| `/blocked` | `DoublePledgeBlocked` | Replay + tree + Lighthouse | **Required** — fraud + tree |
+| `/demo` | `LiveDemoFlowPage` | 5-step fresh invoice | Optional / backup |
+| `/lender` | `LenderViewPage` | Attestation + Fund | Optional 30s |
+| `/sme` | `SmeView` | Request financing | Optional |
+| `/smoke` | `SmokeTestPage` | Diagnostics | **Do not show** |
 
 ---
 
-## 3. Ledger API layer (`frontend/src/ledger/api.ts`)
+## 3. API layer (`frontend/src/ledger/`)
 
-All exports support **mock** (`VITE_USE_MOCKS=true`) and **real** (`false`) paths.
+| Function | Real path | Used by |
+|----------|-----------|---------|
+| `getLenderView` | ACS parallel queries | `/`, `/lender` |
+| `attemptDoublePledgeLive` | Part B replay | `/`, `/blocked` |
+| `getLenderFinancingTree` | `transaction-tree-by-id` | Tree inspector |
+| `demoStep1`–`demoStep5` | Full flow | `/demo` |
+| `requestFinancing` / `fundFinancingOffer` | SME / lender actions | `/sme`, `/lender` |
 
-| Function | Real implementation | UI wired |
-|----------|---------------------|----------|
-| `listInvoices` | ACS `#unpledged:Invoice:Invoice` | `/sme` |
-| `getAttestation` | ACS attestation | `/lender` |
-| `createFinancingOffer` | `submit-and-wait` package-id | via `requestFinancing` |
-| `acceptFinancing` | `CompleteFinancing` actAs SME | via `fundFinancingOffer` |
-| `requestFinancing` | High-level SME → offer | `/sme` button |
-| `fundFinancingOffer` | High-level lender → pledge | `/lender` button |
-| `getLenderView` | Parallel ACS queries | `/`, `/lender` |
-| `listFinancingRequests` | Invoices + pledge markers | `/sme` |
-| `attemptDoublePledgeLive` | Part B replay with progress | Replay component |
-| `getLenderFinancingTree` | `transaction-tree-by-id` | Inspector |
-| `getDoublePledgeAttempt` | Metadata from live markers | `/blocked` context card |
-
-**Conventions (do not break):**
-- ACS queries: `#unpledged:Module:Template`
-- Commands: full package-id hash
-- Browser: `/api/ledger` proxy (CORS)
-- `userId`: `6`
+**Conventions:** ACS filters `#unpledged:…`; commands use full package-id hash; browser uses `/api/ledger` proxy; `userId` 6.
 
 ---
 
@@ -68,48 +70,61 @@ All exports support **mock** (`VITE_USE_MOCKS=true`) and **real** (`false`) path
 
 | Piece | Status |
 |-------|--------|
-| Vite token proxy (`POST /api/token`) | Working |
-| Vite ledger proxy (`/api/ledger`) | Working |
-| Ledger-end cache (10s TTL) | In `realApi.ts` |
-| Party allocation CLI | `allocate:parties` |
-| Act-as grant | `grant:act-as` |
-| Canton MCP (Cursor) | `.cursor/mcp.json`, `npm run mcp:verify` |
+| `POST /api/token` | ✅ Server-side OAuth |
+| `/api/ledger/*` → proxy | ✅ Vite + Vercel `ledger-proxy` |
+| `frontend/vercel.json` rewrites | ✅ |
+| `frontend/.env.production` | ✅ `VITE_USE_MOCKS=false` + parties |
+| Token cache + 401 retry | ✅ `client.ts`, tree, heartbeat |
+| `verify:prod` | ✅ Hosted smoke script |
 
 ---
 
-## 5. Gaps closed (latest wiring pass)
+## 5. Demo video coverage (see DEMO_VIDEO_REPORT.md)
 
-| Gap | Resolution |
-|-----|------------|
-| SME "Request financing" button inert | Wired to `requestFinancing` |
-| Lender "Fund" button inert | Wired to `fundFinancingOffer` |
-| Missing `home-bg.png` (broken import) | CSS gradient hero background |
-| `partiesConfigured()` unused | `LiveBadge` + `/smoke` diagnostics |
-| Inspector stamp in mock mode misleading | "Mock projection" vs "Verified against DevNet" |
-| Verify scripts without npm aliases | `verify:live-ui`, `verify:tree`, `verify:all` |
-| No root README | `README.md` + this audit |
-| `vite-env.d.ts` incomplete | All `VITE_PARTY_*` typed |
+| Beat | Must pass |
+|------|-----------|
+| Privacy A vs B | Lender B = 0 contracts |
+| Double pledge | Lime banner / Invoice already pledged |
+| Tree | Invoice nodes = 0 |
+| Lighthouse | Party URLs open |
+| Live badge | Not Mock mode |
 
 ---
 
-## 6. Remaining limitations
+## 6. Known limitations (acceptable)
 
-1. **Shared DevNet state** — INV-001 is already financed; funding it again fails (expected). Double-pledge replay is the intended live demo for INV-001.
-2. **`ws.ts`** — implemented, not used in UI.
-3. **No CI** — verification is manual via npm scripts.
-4. **No DAR deploy docs** — package ID is pinned; redeploy requires `daml build` + upload + refresh `packageId.ts`.
-5. **Each double-pledge replay** creates an orphan `FinancingOffer` (matches CLI Part B).
+1. **INV-001 already pledged** on shared DevNet — use replay + tree, not re-fund INV-001.
+2. **Double-pledge replay** creates orphan `FinancingOffer` (matches CLI Part B) — rejection is the point.
+3. **Reuters bot wall** — README uses GTR + DOJ + Banking Dive screenshots; Reuters linked as primary source text.
+4. **CanActAs expires** — run `npm run grant:act-as` morning-of.
+5. **DevNet availability** — occasional connect timeouts; retry verify scripts.
+6. **`ws.ts`** — implemented, unused in UI.
+7. **No CI** — manual `verify:*` scripts.
 
 ---
 
-## 7. Pre-demo checklist
+## 7. Pre-flight command block
 
-- [ ] `frontend/.env` — `VITE_USE_MOCKS=false`, all `VITE_PARTY_*` set
-- [ ] `frontend/.env.server` — `CANTON_CLIENT_SECRET` set
-- [ ] `npm run dev` running
-- [ ] `npm run verify:all` passes
-- [ ] Hard refresh `/` — Lender A attestation, Lender B empty
-- [ ] Test double-pledge button once before recording
-- [ ] Transaction tree shows **Invoice nodes: 0**
+```bash
+cd frontend
+npm run grant:act-as
+npm run smoke:ledger
+npm run verify:all
+npm run verify:prod    # if filming production URL
+```
 
-See [DEMO_SCRIPT.md](./DEMO_SCRIPT.md) for narration and timing.
+---
+
+## 8. Files added / updated (Jul 2026 docs pass)
+
+| Path | Purpose |
+|------|---------|
+| `README.md` | Full pitch + research + architecture |
+| `docs/architecture/unpledged-architecture.excalidraw` | Editable system diagram |
+| `docs/research/*.png` | GTR, DOJ, Banking Dive screenshots |
+| `DEMO_VIDEO_REPORT.md` | Video + reliability guide |
+| `LiveDoublePledgeReplay.tsx` | Fraud-prevented UX (not error wall) |
+
+---
+
+See [README.md](./README.md) for setup, [DEMO_SCRIPT.md](./DEMO_SCRIPT.md) for narration.

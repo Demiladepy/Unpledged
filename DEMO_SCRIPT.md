@@ -38,9 +38,11 @@
 
 > "Now watch the fraud attempt. Lender A has financed this invoice. I'll now try — live — to pledge the exact same invoice a second time."
 
-**Action:** Navigate to `/blocked` → click **Attempt second pledge (live)**. Pause. Let the HTTP 400 and `DAML_FAILURE: Invoice already pledged` appear. **Do not talk over it.**
+**Action:** Navigate to `/blocked` → click **Attempt second pledge (live)**. Pause. Wait for the lime **Fraud prevented on-chain · Ledger refused · Invoice already pledged** banner (HTTP 400 is the win). **Do not talk over it. Do not treat this as an error.**
 
 > "The ledger refused it. Not my app — the ledger. The double-pledge that cost First Brands 2.3 billion dollars is structurally impossible here. That rejection just happened, live, on Canton."
+
+Full beat sheet + pre-flight: [DEMO_VIDEO_REPORT.md](./DEMO_VIDEO_REPORT.md).
 
 ---
 
